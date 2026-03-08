@@ -1,806 +1,2379 @@
-openapi: 3.0.2
+openapi: 3.0.3
 info:
-  title: Swagger Petstore - OpenAPI 3.0
-  description: |-
-    This is a sample Pet Store Server based on the OpenAPI 3.0 specification.  You can find out more about
-    Swagger at [http://swagger.io](http://swagger.io). In the third iteration of the pet store, we've switched to the design first approach!
-    You can now help us improve the API whether it's by making changes to the definition itself or to the code.
-    That way, with time, we can improve the API in general, and expose some of the new features in OAS3.
-
-    Some useful links:
-    - [The Pet Store repository](https://github.com/swagger-api/swagger-petstore)
-    - [The source API definition for the Pet Store](https://github.com/swagger-api/swagger-petstore/blob/master/src/main/resources/openapi.yaml)
-  termsOfService: http://swagger.io/terms/
-  contact:
-    email: apiteam@swagger.io
-  license:
-    name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
-  version: 1.0.19
-externalDocs:
-  description: Find out more about Swagger
-  url: http://swagger.io
+  title: School Pickup & Carpool API
+  description: API for school pickup and carpool coordination platform (Mobile + Staff + Admin).
+  version: 1.0.0
 servers:
-  - url: /api/v3
-tags:
-  - name: pet
-    description: Everything about your Pets
-    externalDocs:
-      description: Find out more
-      url: http://swagger.io
-  - name: store
-    description: Access to Petstore orders
-    externalDocs:
-      description: Find out more about our store
-      url: http://swagger.io
-  - name: user
-    description: Operations about user
+  - url: https://api.schoolpickup.com/api/v1
+    description: Production
+
+components:
+  securitySchemes:
+    OAuth2:
+      type: oauth2
+      flows:
+        password:
+          tokenUrl: /oauth/token
+          scopes: {}
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+
+    TokenResponse:
+      type: object
+      properties:
+        access_token: { type: string }
+        refresh_token: { type: string }
+        token_type: { type: string, example: Bearer }
+        expires_in: { type: integer, example: 3600 }
+
+    User:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        school_id: { type: string, format: uuid }
+        family_id: { type: string, format: uuid, nullable: true }
+        full_name: { type: string }
+        email: { type: string, format: email }
+        phone: { type: string }
+        role:
+          type: string
+          enum: [primary_parent, additional_parent, supplementary, staff, coordinator, guard, admin, owner]
+        status:
+          type: string
+          enum: [active, pending, suspended, banned]
+        invite_status:
+          type: string
+          enum: [sent, accepted, expired]
+          nullable: true
+        line_id: { type: string, nullable: true }
+        profile_complete: { type: boolean }
+        last_login: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    Student:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        school_id: { type: string, format: uuid }
+        family_id: { type: string, format: uuid }
+        first_name: { type: string }
+        last_name: { type: string }
+        grade: { type: string }
+        section: { type: string }
+        school_email: { type: string }
+        date_of_birth: { type: string, format: date }
+        blood_type: { type: string }
+        photo_url: { type: string, nullable: true }
+        preferred_gate: { type: string, nullable: true }
+        photo_consent: { type: boolean }
+        status:
+          type: string
+          enum: [enrolled, withdrawn, transferred]
+        notes: { type: string, nullable: true }
+
+    MedicalRecord:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        record_type:
+          type: string
+          enum: [allergy, special_need, medication, other]
+        description: { type: string }
+
+    EmergencyContact:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        contact_name: { type: string }
+        contact_phone: { type: string }
+        relationship: { type: string, nullable: true }
+
+    Vehicle:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        owner_id: { type: string, format: uuid }
+        license_plate: { type: string }
+        brand: { type: string }
+        model: { type: string }
+        year: { type: integer, nullable: true }
+        color: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [pending, approved, rejected]
+        document_url: { type: string, nullable: true }
+        is_default: { type: boolean }
+        rejection_reason: { type: string, nullable: true }
+
+    Family:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        school_id: { type: string, format: uuid }
+        family_name: { type: string }
+        status:
+          type: string
+          enum: [active, pending, suspended, banned]
+        joined_at: { type: string, format: date-time }
+        members:
+          type: array
+          items: { $ref: '#/components/schemas/User' }
+
+    Invitation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string }
+        role: { type: string }
+        status:
+          type: string
+          enum: [sent, accepted, expired]
+        expires_at: { type: string, format: date-time }
+        created_at: { type: string, format: date-time }
+
+    Pickup:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        school_id: { type: string, format: uuid }
+        parent_id: { type: string, format: uuid }
+        vehicle_id: { type: string, format: uuid, nullable: true }
+        vehicle_type:
+          type: string
+          enum: [registered, taxi]
+        taxi_number: { type: string, nullable: true }
+        status:
+          type: string
+          enum: [idle, pre_queue, queued, ready, in_progress, completed, cancelled, no_show]
+        queue_display_id: { type: string, example: "PU-20260224-001" }
+        queue_number: { type: string, example: "A-001" }
+        lane: { type: string, example: "A", nullable: true }
+        estimated_wait_mins: { type: integer, nullable: true }
+        is_carpool: { type: boolean }
+        student_ids:
+          type: array
+          items: { type: string, format: uuid }
+        started_at: { type: string, format: date-time }
+        completed_at: { type: string, format: date-time, nullable: true }
+
+    CarpoolRequest:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        requester_id: { type: string, format: uuid }
+        driver_id: { type: string, format: uuid, nullable: true }
+        drop_off_lat: { type: number }
+        drop_off_lng: { type: number }
+        drop_off_address: { type: string }
+        price: { type: number, example: 300 }
+        status:
+          type: string
+          enum: [pending, matched, confirmed, in_progress, completed, declined, expired, cancelled]
+        created_at: { type: string, format: date-time }
+        matched_at: { type: string, format: date-time, nullable: true }
+        confirmed_at: { type: string, format: date-time, nullable: true }
+        dropped_off_at: { type: string, format: date-time, nullable: true }
+
+    DriverAvailability:
+      type: object
+      properties:
+        user_id: { type: string, format: uuid }
+        vehicle_id: { type: string, format: uuid }
+        is_available: { type: boolean }
+        current_lat: { type: number, nullable: true }
+        current_lng: { type: number, nullable: true }
+
+    CarpoolEarnings:
+      type: object
+      properties:
+        today: { type: number, example: 600 }
+        active_rides: { type: integer }
+        history:
+          type: array
+          items:
+            type: object
+            properties:
+              carpool_request_id: { type: string, format: uuid }
+              amount: { type: number }
+              paid_at: { type: string, format: date-time, nullable: true }
+
+    Notification:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        type:
+          type: string
+          enum: [pickup, carpool, announcement, system]
+        title: { type: string }
+        message: { type: string }
+        is_read: { type: boolean }
+        action_url: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    Lane:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        school_id: { type: string, format: uuid }
+        name: { type: string, example: A }
+        label: { type: string, example: "Lane A - Main Gate" }
+        capacity: { type: integer }
+        is_active: { type: boolean }
+
+    QueueItem:
+      type: object
+      properties:
+        pickup_id: { type: string, format: uuid }
+        queue_number: { type: string }
+        parent_name: { type: string }
+        vehicle: { type: string }
+        students:
+          type: array
+          items: { type: string }
+        status:
+          type: string
+          enum: [idle, pre_queue, queued, ready, in_progress]
+        eta: { type: string }
+        carpool_count: { type: integer }
+
+    QueueStats:
+      type: object
+      properties:
+        in_queue: { type: integer }
+        ready: { type: integer }
+        preparing: { type: integer }
+        completed_today: { type: integer }
+
+    AdminDashboardStats:
+      type: object
+      properties:
+        total_families: { type: integer }
+        active_pickups_today: { type: integer }
+        students_enrolled: { type: integer }
+        staff_count: { type: integer }
+
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+        message: { type: string }
+        status_code: { type: integer }
+
+    PaymentMethod:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        method_type: { type: string, enum: [credit_card, bank_account] }
+        card_last4: { type: string, nullable: true }
+        card_brand: { type: string, nullable: true }
+        bank_name: { type: string, nullable: true }
+        bank_account_name: { type: string, nullable: true }
+        is_default: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    AfterscoolActivity:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        activity_date: { type: string, format: date }
+        activity_name: { type: string }
+        end_time: { type: string, nullable: true }
+        source: { type: string, enum: [manual, school_api] }
+
+    CarpoolSchedule:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        requester_id: { type: string, format: uuid }
+        driver_id: { type: string, format: uuid }
+        student_id: { type: string, format: uuid }
+        drop_off_address: { type: string }
+        price: { type: number }
+        day_of_week:
+          type: array
+          items: { type: integer }
+          example: [1, 3, 5]
+        start_date: { type: string, format: date }
+        end_date: { type: string, format: date, nullable: true }
+        is_active: { type: boolean }
+
+    School:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+        address: { type: string, nullable: true }
+        logo_url: { type: string, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    DisplayQueueItem:
+      type: object
+      properties:
+        queue_number: { type: string }
+        student_photo: { type: string, nullable: true }
+        student_nickname: { type: string }
+        student_grade: { type: string }
+        driver_photo: { type: string, nullable: true }
+        driver_name: { type: string }
+        car_photo: { type: string, nullable: true }
+        license_plate: { type: string }
+
+    RevenueStats:
+      type: object
+      properties:
+        revenue: { type: number }
+        expenses: { type: number }
+        gross_margin: { type: number }
+        gross_margin_pct: { type: number }
+        paid_pickups: { type: integer }
+        chart_data:
+          type: array
+          items:
+            type: object
+            properties:
+              date: { type: string }
+              revenue: { type: number }
+
+security:
+  - bearerAuth: []
+
 paths:
-  /pet:
+
+  # ── AUTH ─────────────────────────────────────────────────────
+
+  /oauth/token:
+    post:
+      summary: Get access token (login / refresh)
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [grant_type, client_id]
+              properties:
+                grant_type: { type: string, enum: [password, refresh_token, authorization_code] }
+                client_id: { type: string }
+                username: { type: string }
+                password: { type: string }
+                refresh_token: { type: string }
+      responses:
+        '200':
+          description: Token issued
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+
+  /auth/register:
+    post:
+      summary: Register as primary parent
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password, full_name, phone]
+              properties:
+                email: { type: string }
+                password: { type: string }
+                full_name: { type: string }
+                phone: { type: string }
+      responses:
+        '201': { description: "Account created. OTP sent to email." }
+
+  /auth/verify-otp:
+    post:
+      summary: Verify email OTP
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, otp]
+              properties:
+                email: { type: string }
+                otp: { type: string }
+      responses:
+        '200':
+          description: Account activated
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+
+  /auth/invitations/{token}:
+    get:
+      summary: Validate invite token and get pre-filled info
+      tags: [Authentication]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: Invitation details
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invitation' }
+        '404': { description: Token not found or expired }
+
+  /auth/invitations/accept:
+    post:
+      summary: Accept invitation and create account
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, full_name, phone, password]
+              properties:
+                token: { type: string }
+                full_name: { type: string }
+                phone: { type: string }
+                password: { type: string }
+      responses:
+        '201':
+          description: Account created and linked
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+
+  /auth/logout:
+    post:
+      summary: Revoke current token
+      tags: [Authentication]
+      responses:
+        '204': { description: Logged out }
+
+  # ── USERS ─────────────────────────────────────────────────────
+
+  /users/me:
+    get:
+      summary: Get current user profile
+      tags: [Users]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+          description: ''
     put:
-      tags:
-        - pet
-      summary: Update an existing pet
-      description: Update an existing pet by Id
-      operationId: updatePet
+      summary: Update profile
+      tags: [Users]
       requestBody:
-        description: Update an existent pet in the store
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/Pet"
-          application/xml:
-            schema:
-              $ref: "#/components/schemas/Pet"
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: "#/components/schemas/Pet"
-        required: true
+              type: object
+              properties:
+                full_name: { type: string }
+                phone: { type: string }
+                line_id: { type: string }
       responses:
-        "200":
-          description: Successful operation
+        '200':
           content:
-            application/xml:
-              schema:
-                $ref: "#/components/schemas/Pet"
             application/json:
-              schema:
-                $ref: "#/components/schemas/Pet"
-        "400":
-          description: Invalid ID supplied
-        "404":
-          description: Pet not found
-        "405":
-          description: Validation exception
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
-    post:
-      tags:
-        - pet
-      summary: Add a new pet to the store
-      description: Add a new pet to the store
-      operationId: addPet
-      requestBody:
-        description: Create a new pet in the store
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Pet"
-          application/xml:
-            schema:
-              $ref: "#/components/schemas/Pet"
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: "#/components/schemas/Pet"
-        required: true
-      responses:
-        "200":
-          description: Successful operation
-          content:
-            application/xml:
-              schema:
-                $ref: "#/components/schemas/Pet"
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Pet"
-        "405":
-          description: Invalid input
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
-  /pet/findByStatus:
+              schema: { $ref: '#/components/schemas/User' }
+          description: ''
+
+  # ── FAMILIES ──────────────────────────────────────────────────
+
+  /families/me:
     get:
-      tags:
-        - pet
-      summary: Finds Pets by status
-      description: Multiple status values can be provided with comma separated strings
-      operationId: findPetsByStatus
-      parameters:
-        - name: status
-          in: query
-          description: Status values that need to be considered for filter
-          required: false
-          explode: true
-          schema:
-            type: string
-            default: available
-            enum:
-              - available
-              - pending
-              - sold
+      summary: Get my family with all members
+      tags: [Families]
       responses:
-        "200":
-          description: successful operation
+        '200':
           content:
-            application/xml:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Pet"
             application/json:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Pet"
-        "400":
-          description: Invalid status value
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
-  /pet/findByTags:
+              schema: { $ref: '#/components/schemas/Family' }
+          description: ''
+
+  /families/me/members:
     get:
-      tags:
-        - pet
-      summary: Finds Pets by tags
-      description:
-        "Multiple tags can be provided with comma separated strings. Use\
-        \ tag1, tag2, tag3 for testing."
-      operationId: findPetsByTags
-      parameters:
-        - name: tags
-          in: query
-          description: Tags to filter by
-          required: false
-          explode: true
-          schema:
-            type: array
-            items:
-              type: string
+      summary: List all users in my family
+      tags: [Families]
       responses:
-        "200":
-          description: successful operation
+        '200':
+          description: Family members
           content:
-            application/xml:
-              schema:
-                type: array
-                items:
-                  $ref: "#/components/schemas/Pet"
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: "#/components/schemas/Pet"
-        "400":
-          description: Invalid tag value
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
-  /pet/{petId}:
-    get:
-      tags:
-        - pet
-      summary: Find pet by ID
-      description: Returns a single pet
-      operationId: getPetById
-      parameters:
-        - name: petId
-          in: path
-          description: ID of pet to return
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        "200":
-          description: successful operation
-          content:
-            application/xml:
-              schema:
-                $ref: "#/components/schemas/Pet"
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Pet"
-        "400":
-          description: Invalid ID supplied
-        "404":
-          description: Pet not found
-      security:
-        - api_key: []
-        - petstore_auth:
-            - write:pets
-            - read:pets
-    post:
-      tags:
-        - pet
-      summary: Updates a pet in the store with form data
-      description: ""
-      operationId: updatePetWithForm
-      parameters:
-        - name: petId
-          in: path
-          description: ID of pet that needs to be updated
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: name
-          in: query
-          description: Name of pet that needs to be updated
-          schema:
-            type: string
-        - name: status
-          in: query
-          description: Status of pet that needs to be updated
-          schema:
-            type: string
-      responses:
-        "405":
-          description: Invalid input
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
+                items: { $ref: '#/components/schemas/User' }
+
+  /families/me/members/{user_id}:
     delete:
-      tags:
-        - pet
-      summary: Deletes a pet
-      description: ""
-      operationId: deletePet
+      summary: (Primary only) Remove a family member
+      tags: [Families]
       parameters:
-        - name: api_key
-          in: header
-          description: ""
-          required: false
-          schema:
-            type: string
-        - name: petId
+        - name: user_id
           in: path
-          description: Pet id to delete
           required: true
-          schema:
-            type: integer
-            format: int64
+          schema: { type: string, format: uuid }
       responses:
-        "400":
-          description: Invalid pet value
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
-  /pet/{petId}/uploadImage:
-    post:
-      tags:
-        - pet
-      summary: uploads an image
-      description: ""
-      operationId: uploadFile
-      parameters:
-        - name: petId
-          in: path
-          description: ID of pet to update
-          required: true
-          schema:
-            type: integer
-            format: int64
-        - name: additionalMetadata
-          in: query
-          description: Additional Metadata
-          required: false
-          schema:
-            type: string
-      requestBody:
-        content:
-          application/octet-stream:
-            schema:
-              type: string
-              format: binary
+        '204': { description: Member removed }
+
+  /families/me/invitations:
+    get:
+      summary: List pending invitations I sent
+      tags: [Families]
       responses:
-        "200":
-          description: successful operation
+        '200':
+          description: List of sent invitations
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ApiResponse"
-      security:
-        - petstore_auth:
-            - write:pets
-            - read:pets
-  /store/inventory:
-    get:
-      tags:
-        - store
-      summary: Returns pet inventories by status
-      description: Returns a map of status codes to quantities
-      operationId: getInventory
+                type: array
+                items: { $ref: '#/components/schemas/Invitation' }
+    post:
+      summary: Invite a family member
+      tags: [Families]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string }
+                role:
+                  type: string
+                  enum: [additional_parent, supplementary]
       responses:
-        "200":
-          description: successful operation
+        '201':
+          description: Invitation sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invitation' }
+
+  # ── STUDENTS ──────────────────────────────────────────────────
+
+  /families/me/students:
+    get:
+      summary: List students in my family
+      tags: [Students]
+      responses:
+        '200':
+          description: List of students
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Student' }
+    post:
+      summary: Add a student to family
+      tags: [Students]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [first_name, last_name, grade, school_email]
+              properties:
+                first_name: { type: string }
+                last_name: { type: string }
+                grade: { type: string }
+                section: { type: string }
+                school_email: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Student' }
+          description: ''
+
+  /students/{student_id}:
+    get:
+      summary: Get student detail
+      tags: [Students]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Student' }
+          description: ''
+    put:
+      summary: Update student info
+      tags: [Students]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Student' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Student' }
+          description: ''
+
+  /students/{student_id}/medical:
+    get:
+      summary: Get medical records (allergies, special needs)
+      tags: [Students]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Medical records
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/MedicalRecord' }
+    post:
+      summary: Add a medical record
+      tags: [Students]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [record_type, description]
+              properties:
+                record_type: { type: string, enum: [allergy, special_need, medication, other] }
+                description: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/MedicalRecord' }
+          description: ''
+
+  /students/{student_id}/medical/{record_id}:
+    delete:
+      summary: Remove a medical record
+      tags: [Students]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: record_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Deleted }
+
+  /students/{student_id}/emergency-contacts:
+    get:
+      summary: List emergency contacts
+      tags: [Students]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Emergency contacts
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/EmergencyContact' }
+    post:
+      summary: Add emergency contact
+      tags: [Students]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [contact_name, contact_phone]
+              properties:
+                contact_name: { type: string }
+                contact_phone: { type: string }
+                relationship: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/EmergencyContact' }
+          description: ''
+
+  /students/{student_id}/emergency-contacts/{contact_id}:
+    delete:
+      summary: Remove emergency contact
+      tags: [Students]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+        - name: contact_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Deleted }
+
+  # ── VEHICLES ──────────────────────────────────────────────────
+
+  /vehicles/me:
+    get:
+      summary: List my vehicles
+      tags: [Vehicles]
+      responses:
+        '200':
+          description: Vehicles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Vehicle' }
+
+  /vehicles:
+    post:
+      summary: Register a new vehicle
+      tags: [Vehicles]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [license_plate, brand, model]
+              properties:
+                license_plate: { type: string }
+                brand: { type: string }
+                model: { type: string }
+                year: { type: integer }
+                color: { type: string }
+                document_url: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vehicle' }
+          description: ''
+
+  /vehicles/{vehicle_id}:
+    put:
+      summary: Edit vehicle info
+      tags: [Vehicles]
+      parameters:
+        - name: vehicle_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Vehicle' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Vehicle' }
+          description: ''
+    delete:
+      summary: Delete a vehicle
+      tags: [Vehicles]
+      parameters:
+        - name: vehicle_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Deleted }
+
+  /vehicles/{vehicle_id}/default:
+    put:
+      summary: Set vehicle as default
+      tags: [Vehicles]
+      parameters:
+        - name: vehicle_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Default updated }
+
+  # ── PICKUPS ───────────────────────────────────────────────────
+
+  /pickups:
+    post:
+      summary: Start a new pickup
+      tags: [Pickups]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [student_ids, vehicle_type]
+              properties:
+                student_ids:
+                  type: array
+                  items: { type: string, format: uuid }
+                vehicle_id: { type: string, format: uuid }
+                vehicle_type: { type: string, enum: [registered, taxi] }
+                taxi_number: { type: string }
+                taxi_color: { type: string }
+                parent_lat: { type: number }
+                parent_lng: { type: number }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pickup' }
+          description: ''
+
+  /pickups/active:
+    get:
+      summary: Get my currently active pickup
+      tags: [Pickups]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pickup' }
+          description: ''
+        '204': { description: No active pickup }
+
+  /pickups/history:
+    get:
+      summary: My past pickups
+      tags: [Pickups]
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 20 }
+      responses:
+        '200':
+          description: Pickup history
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Pickup' }
+
+  /pickups/{pickup_id}:
+    get:
+      summary: Get pickup detail
+      tags: [Pickups]
+      parameters:
+        - name: pickup_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pickup' }
+          description: ''
+
+  /pickups/{pickup_id}/location:
+    put:
+      summary: Update parent live location (triggers geofence pre-queue at ≤500m)
+      tags: [Pickups]
+      parameters:
+        - name: pickup_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lat, lng]
+              properties:
+                lat: { type: number }
+                lng: { type: number }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pickup' }
+          description: ''
+
+  /pickups/{pickup_id}/cancel:
+    post:
+      summary: Cancel an active pickup
+      tags: [Pickups]
+      parameters:
+        - name: pickup_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pickup' }
+          description: ''
+
+  # ── CARPOOLS ──────────────────────────────────────────────────
+
+  /carpools/requests/mine:
+    get:
+      summary: My active carpool requests (as requester)
+      tags: [Carpools]
+      responses:
+        '200':
+          description: My carpool requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CarpoolRequest' }
+
+  /carpools/requests:
+    post:
+      summary: Request a carpool for a student
+      tags: [Carpools]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [student_id, drop_off_lat, drop_off_lng, price]
+              properties:
+                student_id: { type: string, format: uuid }
+                drop_off_lat: { type: number }
+                drop_off_lng: { type: number }
+                drop_off_address: { type: string }
+                price: { type: number, default: 300 }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CarpoolRequest' }
+          description: ''
+
+  /carpools/available-requests:
+    get:
+      summary: (Driver) Pending requests from other families at this school
+      tags: [Carpools]
+      responses:
+        '200':
+          description: Available requests
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CarpoolRequest' }
+
+  /carpools/requests/{id}/accept:
+    post:
+      summary: (Driver) Accept a pending carpool request
+      tags: [Carpools]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CarpoolRequest' }
+          description: ''
+
+  /carpools/requests/{id}/confirm:
+    post:
+      summary: (Requester) Confirm matched driver
+      tags: [Carpools]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CarpoolRequest' }
+          description: ''
+
+  /carpools/requests/{id}/decline:
+    post:
+      summary: (Driver) Decline a request
+      tags: [Carpools]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CarpoolRequest' }
+          description: ''
+
+  /carpools/requests/{id}/cancel:
+    post:
+      summary: (Requester) Cancel own request
+      tags: [Carpools]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CarpoolRequest' }
+          description: ''
+
+  /carpools/requests/{id}/dropoff:
+    post:
+      summary: (Driver) Mark student as dropped off
+      tags: [Carpools]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CarpoolRequest' }
+          description: ''
+
+  /carpools/driver/availability:
+    get:
+      summary: Get my driver availability status
+      tags: [Carpools]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriverAvailability' }
+          description: ''
+    put:
+      summary: Toggle driver mode on/off
+      tags: [Carpools]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [is_available, vehicle_id]
+              properties:
+                is_available: { type: boolean }
+                vehicle_id: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DriverAvailability' }
+          description: ''
+
+  /carpools/driver/earnings:
+    get:
+      summary: Get driver earnings summary and history
+      tags: [Carpools]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CarpoolEarnings' }
+          description: ''
+
+  # ── NOTIFICATIONS ─────────────────────────────────────────────
+
+  /notifications:
+    get:
+      summary: Get notifications
+      tags: [Notifications]
+      parameters:
+        - name: is_read
+          in: query
+          schema: { type: boolean }
+        - name: type
+          in: query
+          schema: { type: string, enum: [pickup, carpool, announcement, system] }
+      responses:
+        '200':
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Notification' }
+
+  /notifications/unread-count:
+    get:
+      summary: Get unread notification count
+      tags: [Notifications]
+      responses:
+        '200':
+          description: Unread count
           content:
             application/json:
               schema:
                 type: object
-                additionalProperties:
-                  type: integer
-                  format: int32
-      security:
-        - api_key: []
-  /store/order:
-    post:
-      tags:
-        - store
-      summary: Place an order for a pet
-      description: Place a new order in the store
-      operationId: placeOrder
-      requestBody:
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/Order"
-          application/xml:
-            schema:
-              $ref: "#/components/schemas/Order"
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: "#/components/schemas/Order"
-      responses:
-        "200":
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Order"
-        "405":
-          description: Invalid input
-  /store/order/{orderId}:
-    get:
-      tags:
-        - store
-      summary: Find purchase order by ID
-      description:
-        For valid response try integer IDs with value <= 5 or > 10. Other
-        values will generate exceptions.
-      operationId: getOrderById
-      parameters:
-        - name: orderId
-          in: path
-          description: ID of order that needs to be fetched
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        "200":
-          description: successful operation
-          content:
-            application/xml:
-              schema:
-                $ref: "#/components/schemas/Order"
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Order"
-        "400":
-          description: Invalid ID supplied
-        "404":
-          description: Order not found
-    delete:
-      tags:
-        - store
-      summary: Delete purchase order by ID
-      description:
-        For valid response try integer IDs with value < 1000. Anything
-        above 1000 or nonintegers will generate API errors
-      operationId: deleteOrder
-      parameters:
-        - name: orderId
-          in: path
-          description: ID of the order that needs to be deleted
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        "400":
-          description: Invalid ID supplied
-        "404":
-          description: Order not found
-  /user:
-    post:
-      tags:
-        - user
-      summary: Create user
-      description: This can only be done by the logged in user.
-      operationId: createUser
-      requestBody:
-        description: Created user object
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/User"
-          application/xml:
-            schema:
-              $ref: "#/components/schemas/User"
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: "#/components/schemas/User"
-      responses:
-        default:
-          description: successful operation
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
-            application/xml:
-              schema:
-                $ref: "#/components/schemas/User"
-  /user/createWithList:
-    post:
-      tags:
-        - user
-      summary: Creates list of users with given input array
-      description: Creates list of users with given input array
-      operationId: createUsersWithListInput
-      requestBody:
-        content:
-          application/json:
-            schema:
-              type: array
-              items:
-                $ref: "#/components/schemas/User"
-      responses:
-        "200":
-          description: Successful operation
-          content:
-            application/xml:
-              schema:
-                $ref: "#/components/schemas/User"
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
-        default:
-          description: successful operation
-  /user/login:
-    get:
-      tags:
-        - user
-      summary: Logs user into the system
-      description: ""
-      operationId: loginUser
-      parameters:
-        - name: username
-          in: query
-          description: The user name for login
-          required: false
-          schema:
-            type: string
-        - name: password
-          in: query
-          description: The password for login in clear text
-          required: false
-          schema:
-            type: string
-      responses:
-        "200":
-          description: successful operation
-          headers:
-            X-Rate-Limit:
-              description: calls per hour allowed by the user
-              schema:
-                type: integer
-                format: int32
-            X-Expires-After:
-              description: date in UTC when token expires
-              schema:
-                type: string
-                format: date-time
-          content:
-            application/xml:
-              schema:
-                type: string
-            application/json:
-              schema:
-                type: string
-        "400":
-          description: Invalid username/password supplied
-  /user/logout:
-    get:
-      tags:
-        - user
-      summary: Logs out current logged in user session
-      description: ""
-      operationId: logoutUser
-      parameters: []
-      responses:
-        default:
-          description: successful operation
-  /user/{username}:
-    get:
-      tags:
-        - user
-      summary: Get user by user name
-      description: ""
-      operationId: getUserByName
-      parameters:
-        - name: username
-          in: path
-          description: "The name that needs to be fetched. Use user1 for testing. "
-          required: true
-          schema:
-            type: string
-      responses:
-        "200":
-          description: successful operation
-          content:
-            application/xml:
-              schema:
-                $ref: "#/components/schemas/User"
-            application/json:
-              schema:
-                $ref: "#/components/schemas/User"
-        "400":
-          description: Invalid username supplied
-        "404":
-          description: User not found
+                properties:
+                  count: { type: integer }
+
+  /notifications/{id}/read:
     put:
-      tags:
-        - user
-      summary: Update user
-      description: This can only be done by the logged in user.
-      operationId: updateUser
+      summary: Mark notification as read
+      tags: [Notifications]
       parameters:
-        - name: username
+        - name: id
           in: path
-          description: name that needs to be updated
           required: true
-          schema:
-            type: string
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Marked as read }
+
+  /notifications/read-all:
+    put:
+      summary: Mark all notifications as read
+      tags: [Notifications]
+      responses:
+        '200': { description: All marked as read }
+
+  # ── STAFF ─────────────────────────────────────────────────────
+
+  /staff/queue/stats:
+    get:
+      summary: Queue summary stats for today
+      tags: [Staff Portal]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/QueueStats' }
+          description: ''
+
+  /staff/pickups/queue:
+    get:
+      summary: Get ordered pickup queue
+      tags: [Staff Portal]
+      parameters:
+        - name: lane
+          in: query
+          schema: { type: string, example: A }
+        - name: status
+          in: query
+          schema: { type: string, example: "queued,ready" }
+      responses:
+        '200':
+          description: Ordered queue items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/QueueItem' }
+
+  /staff/pickups/{pickup_id}/status:
+    put:
+      summary: Update pickup status
+      tags: [Staff Portal]
+      parameters:
+        - name: pickup_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
       requestBody:
-        description: Update an existent user in the store
+        required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/User"
-          application/xml:
-            schema:
-              $ref: "#/components/schemas/User"
-          application/x-www-form-urlencoded:
-            schema:
-              $ref: "#/components/schemas/User"
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [ready, completed, no_show] }
       responses:
-        default:
-          description: successful operation
-    delete:
-      tags:
-        - user
-      summary: Delete user
-      description: This can only be done by the logged in user.
-      operationId: deleteUser
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pickup' }
+          description: ''
+
+  /staff/pickups/{pickup_id}/lane:
+    put:
+      summary: Assign or change pickup lane
+      tags: [Staff Portal]
       parameters:
-        - name: username
+        - name: pickup_id
           in: path
-          description: The name that needs to be deleted
           required: true
-          schema:
-            type: string
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lane_id]
+              properties:
+                lane_id: { type: string, format: uuid }
       responses:
-        "400":
-          description: Invalid username supplied
-        "404":
-          description: User not found
-components:
-  schemas:
-    Order:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-          example: 10
-        petId:
-          type: integer
-          format: int64
-          example: 198772
-        quantity:
-          type: integer
-          format: int32
-          example: 7
-        shipDate:
-          type: string
-          format: date-time
-        status:
-          type: string
-          description: Order Status
-          example: approved
-          enum:
-            - placed
-            - approved
-            - delivered
-        complete:
-          type: boolean
-      xml:
-        name: order
-    Customer:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-          example: 100000
-        username:
-          type: string
-          example: fehguy
-        address:
-          type: array
-          xml:
-            name: addresses
-            wrapped: true
-          items:
-            $ref: "#/components/schemas/Address"
-      xml:
-        name: customer
-    Address:
-      type: object
-      properties:
-        street:
-          type: string
-          example: 437 Lytton
-        city:
-          type: string
-          example: Palo Alto
-        state:
-          type: string
-          example: CA
-        zip:
-          type: string
-          example: "94301"
-      xml:
-        name: address
-    Category:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-          example: 1
-        name:
-          type: string
-          example: Dogs
-      xml:
-        name: category
-    User:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-          example: 10
-        username:
-          type: string
-          example: theUser
-        firstName:
-          type: string
-          example: John
-        lastName:
-          type: string
-          example: James
-        email:
-          type: string
-          example: john@email.com
-        password:
-          type: string
-          example: "12345"
-        phone:
-          type: string
-          example: "12345"
-        userStatus:
-          type: integer
-          description: User Status
-          format: int32
-          example: 1
-      xml:
-        name: user
-    Tag:
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-        name:
-          type: string
-      xml:
-        name: tag
-    Pet:
-      required:
-        - name
-        - photoUrls
-      type: object
-      properties:
-        id:
-          type: integer
-          format: int64
-          example: 10
-        name:
-          type: string
-          example: doggie
-        category:
-          $ref: "#/components/schemas/Category"
-        photoUrls:
-          type: array
-          xml:
-            wrapped: true
-          items:
-            type: string
-            xml:
-              name: photoUrl
-        tags:
-          type: array
-          xml:
-            wrapped: true
-          items:
-            $ref: "#/components/schemas/Tag"
-        status:
-          type: string
-          description: pet status in the store
-          enum:
-            - available
-            - pending
-            - sold
-      xml:
-        name: pet
-    ApiResponse:
-      type: object
-      properties:
-        code:
-          type: integer
-          format: int32
-        type:
-          type: string
-        message:
-          type: string
-      xml:
-        name: "##default"
-  requestBodies:
-    Pet:
-      description: Pet object that needs to be added to the store
-      content:
-        application/json:
-          schema:
-            $ref: "#/components/schemas/Pet"
-        application/xml:
-          schema:
-            $ref: "#/components/schemas/Pet"
-    UserArray:
-      description: List of user object
-      content:
-        application/json:
-          schema:
-            type: array
-            items:
-              $ref: "#/components/schemas/User"
-  securitySchemes:
-    petstore_auth:
-      type: oauth2
-      flows:
-        implicit:
-          authorizationUrl: https://petstore3.swagger.io/oauth/authorize
-          scopes:
-            write:pets: modify pets in your account
-            read:pets: read your pets
-    api_key:
-      type: apiKey
-      name: api_key
-      in: header
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pickup' }
+          description: ''
+
+  /staff/pickups/{pickup_id}/complete:
+    post:
+      summary: Confirm student handoff (completes pickup)
+      tags: [Staff Portal]
+      parameters:
+        - name: pickup_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pickup' }
+          description: ''
+
+  # ── ADMIN ─────────────────────────────────────────────────────
+
+  /admin/dashboard/stats:
+    get:
+      summary: Admin dashboard statistics
+      tags: [Admin Portal]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AdminDashboardStats' }
+          description: ''
+
+  /admin/dashboard/pending-approvals:
+    get:
+      summary: List pending user accounts awaiting approval
+      tags: [Admin Portal]
+      responses:
+        '200':
+          description: Pending users
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+
+  /admin/users/{user_id}/approve:
+    put:
+      summary: Approve a pending user account
+      tags: [Admin Portal]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: User approved }
+
+  /admin/users/{user_id}/reject:
+    put:
+      summary: Reject a pending user account
+      tags: [Admin Portal]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: User rejected }
+
+  /admin/families:
+    get:
+      summary: List all families
+      tags: [Admin Portal]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, pending, suspended, banned] }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+      responses:
+        '200':
+          description: Families
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Family' }
+
+  /admin/families/{family_id}:
+    get:
+      summary: Get family detail with members and students
+      tags: [Admin Portal]
+      parameters:
+        - name: family_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Family' }
+          description: ''
+
+  /admin/families/{family_id}/status:
+    put:
+      summary: Update family account status
+      tags: [Admin Portal]
+      parameters:
+        - name: family_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, suspended, banned] }
+      responses:
+        '200': { description: Status updated }
+
+  /admin/students:
+    get:
+      summary: List all students
+      tags: [Admin Portal]
+      parameters:
+        - name: grade
+          in: query
+          schema: { type: string }
+        - name: section
+          in: query
+          schema: { type: string }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Students
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Student' }
+
+  /admin/students/{student_id}:
+    get:
+      summary: Get full student record (admin view)
+      tags: [Admin Portal]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Student' }
+          description: ''
+
+  /admin/staff:
+    get:
+      summary: List school staff
+      tags: [Admin Portal]
+      parameters:
+        - name: role
+          in: query
+          schema: { type: string, enum: [admin, coordinator, staff, guard] }
+        - name: status
+          in: query
+          schema: { type: string, enum: [active, pending, suspended] }
+        - name: search
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: Staff list
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+
+  /admin/staff/invitations:
+    post:
+      summary: Invite a new staff member
+      tags: [Admin Portal]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string }
+                full_name: { type: string }
+                role: { type: string, enum: [admin, coordinator, staff, guard] }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invitation' }
+          description: ''
+
+  /admin/staff/invitations/{id}/resend:
+    post:
+      summary: Resend invite email to a staff member
+      tags: [Admin Portal]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Invite resent }
+
+  /admin/staff/{user_id}/status:
+    put:
+      summary: Suspend or reactivate a staff account
+      tags: [Admin Portal]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, suspended] }
+      responses:
+        '200': { description: Status updated }
+
+  /admin/staff/{user_id}:
+    delete:
+      summary: Remove a staff member
+      tags: [Admin Portal]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Staff removed }
+
+  /admin/vehicles:
+    get:
+      summary: List all vehicles
+      tags: [Admin Portal]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [pending, approved, rejected] }
+      responses:
+        '200':
+          description: Vehicles
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Vehicle' }
+
+  /admin/vehicles/{vehicle_id}/approve:
+    put:
+      summary: Approve vehicle registration
+      tags: [Admin Portal]
+      parameters:
+        - name: vehicle_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Approved }
+
+  /admin/vehicles/{vehicle_id}/reject:
+    put:
+      summary: Reject vehicle registration
+      tags: [Admin Portal]
+      parameters:
+        - name: vehicle_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Rejected }
+
+  /admin/pickups:
+    get:
+      summary: Full pickup history (admin view)
+      tags: [Admin Portal]
+      parameters:
+        - name: date
+          in: query
+          schema: { type: string, format: date }
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: family_id
+          in: query
+          schema: { type: string, format: uuid }
+        - name: is_carpool
+          in: query
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: Pickups
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Pickup' }
+
+  /admin/pickups/{pickup_id}:
+    get:
+      summary: Get pickup detail (admin view)
+      tags: [Admin Portal]
+      parameters:
+        - name: pickup_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pickup' }
+          description: ''
+
+  /admin/lanes:
+    get:
+      summary: List school lanes
+      tags: [Admin Portal]
+      responses:
+        '200':
+          description: Lanes
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Lane' }
+    post:
+      summary: Create a new lane
+      tags: [Admin Portal]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                label: { type: string }
+                capacity: { type: integer }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Lane' }
+          description: ''
+
+  /admin/lanes/{lane_id}:
+    put:
+      summary: Update lane config
+      tags: [Admin Portal]
+      parameters:
+        - name: lane_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/Lane' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Lane' }
+          description: ''
+        '204': { description: Deactivated }
+
+  # ── ADMIN: Afterschool Activities ────────────────────────────
+
+  /admin/students/{student_id}/afterschool:
+    get:
+      summary: List afterschool activities for a student
+      tags: [Admin Portal]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Activities
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/AfterscoolActivity' }
+    post:
+      summary: Add an afterschool activity
+      tags: [Admin Portal]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [activity_date, activity_name]
+              properties:
+                activity_date: { type: string, format: date }
+                activity_name: { type: string }
+                end_time: { type: string, example: "17:30" }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AfterscoolActivity' }
+          description: ''
+
+  /admin/afterschool/{activity_id}:
+    delete:
+      summary: Remove an afterschool activity
+      tags: [Admin Portal]
+      parameters:
+        - name: activity_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Deleted }
+
+  # ── ADMIN: Carpool Ban ────────────────────────────────────────
+
+  /admin/families/{family_id}/carpool-ban:
+    put:
+      summary: Ban family from carpooling
+      tags: [Admin Portal]
+      parameters:
+        - name: family_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string }
+      responses:
+        '200': { description: Carpool ban applied }
+
+  /admin/families/{family_id}/carpool-unban:
+    put:
+      summary: Lift carpool ban from family
+      tags: [Admin Portal]
+      parameters:
+        - name: family_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Carpool ban lifted }
+
+  # ── PAYMENT METHODS ───────────────────────────────────────────
+
+  /payment-methods:
+    get:
+      summary: List my payment methods
+      tags: [Payment Methods]
+      responses:
+        '200':
+          description: Payment methods
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/PaymentMethod' }
+
+  /payment-methods/card:
+    post:
+      summary: Add a credit card via Stripe PaymentMethod ID
+      tags: [Payment Methods]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [stripe_pm_id]
+              properties:
+                stripe_pm_id: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentMethod' }
+          description: ''
+
+  /payment-methods/bank:
+    post:
+      summary: Add bank account for payout (carpool drivers)
+      tags: [Payment Methods]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [bank_name, bank_account_no, bank_account_name]
+              properties:
+                bank_name: { type: string }
+                bank_account_no: { type: string }
+                bank_account_name: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaymentMethod' }
+          description: ''
+
+  /payment-methods/{id}:
+    delete:
+      summary: Remove a payment method
+      tags: [Payment Methods]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Deleted }
+
+  /payment-methods/{id}/default:
+    put:
+      summary: Set as default payment method
+      tags: [Payment Methods]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Default updated }
+
+  # ── AFTERSCHOOL CHECK (Parent) ────────────────────────────────
+
+  /students/{student_id}/afterschool-today:
+    get:
+      summary: Check if student has afterschool activity today
+      tags: [Students]
+      parameters:
+        - name: student_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Afterschool activity status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  has_activity: { type: boolean }
+                  activity_name: { type: string, nullable: true }
+                  end_time: { type: string, nullable: true }
+
+  # ── PICKUPS: Family Active Check ──────────────────────────────
+
+  /pickups/family-active:
+    get:
+      summary: Check if another family member has an active pickup
+      tags: [Pickups]
+      responses:
+        '200':
+          description: Active family pickup or null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exists: { type: boolean }
+                  parent_name: { type: string, nullable: true }
+                  status: { type: string, nullable: true }
+                  queue_number: { type: string, nullable: true }
+
+  # ── CARPOOL SCHEDULES ─────────────────────────────────────────
+
+  /carpools/schedules/mine:
+    get:
+      summary: My recurring carpool schedules
+      tags: [Carpools]
+      responses:
+        '200':
+          description: My schedules
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/CarpoolSchedule' }
+
+  /carpools/schedules:
+    post:
+      summary: Create a recurring carpool schedule
+      tags: [Carpools]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [driver_id, student_id, day_of_week, start_date]
+              properties:
+                driver_id: { type: string, format: uuid }
+                student_id: { type: string, format: uuid }
+                drop_off_address: { type: string }
+                drop_off_lat: { type: number }
+                drop_off_lng: { type: number }
+                price: { type: number, default: 300 }
+                day_of_week:
+                  type: array
+                  items: { type: integer, minimum: 0, maximum: 6 }
+                  example: [1, 3, 5]
+                start_date: { type: string, format: date }
+                end_date: { type: string, format: date, nullable: true }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CarpoolSchedule' }
+          description: ''
+
+  /carpools/schedules/{id}:
+    put:
+      summary: Update schedule
+      tags: [Carpools]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CarpoolSchedule' }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CarpoolSchedule' }
+          description: ''
+    delete:
+      summary: Cancel recurring schedule
+      tags: [Carpools]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '204': { description: Cancelled }
+
+  # ── STAFF: Nearby, All, Unmark ────────────────────────────────
+
+  /staff/pickups/nearby:
+    get:
+      summary: Pickups whose parents are within radius (pre_queue)
+      tags: [Staff Portal]
+      parameters:
+        - name: radius_m
+          in: query
+          schema: { type: integer, default: 500 }
+      responses:
+        '200':
+          description: Nearby pickups
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/QueueItem' }
+
+  /staff/pickups/all:
+    get:
+      summary: All pickups for today
+      tags: [Staff Portal]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+      responses:
+        '200':
+          description: All pickups
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Pickup' }
+
+  /staff/pickups/{pickup_id}/unmark:
+    put:
+      summary: Reset incorrect pickup mark back to queued
+      tags: [Staff Portal]
+      parameters:
+        - name: pickup_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Pickup' }
+          description: ''
+
+  # ── TV / DISPLAY ──────────────────────────────────────────────
+
+  /display/queue:
+    get:
+      summary: Read-only queue feed for TV display (school-scoped display token)
+      tags: [TV Display]
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: lane
+          in: query
+          schema: { type: string, example: A }
+      responses:
+        '200':
+          description: TV queue items
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/DisplayQueueItem' }
+
+  /display/token:
+    get:
+      summary: "(Admin only) Generate long-lived display token for TV"
+      tags: [TV Display]
+      responses:
+        '200':
+          description: Display token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  expires_at: { type: string, format: date-time }
+
+  # ── STUDENT APP ───────────────────────────────────────────────
+
+  /auth/student/register:
+    post:
+      summary: Student self-registration via school email
+      tags: [Student App]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [school_email, password]
+              properties:
+                school_email: { type: string }
+                password: { type: string }
+      responses:
+        '201':
+          description: Student account created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TokenResponse' }
+
+  /students/me:
+    get:
+      summary: Student profile (self)
+      tags: [Student App]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Student' }
+          description: ''
+
+  /students/me/pickup-today:
+    get:
+      summary: Who is picking me up today and what is the status
+      tags: [Student App]
+      responses:
+        '200':
+          description: Today's pickup for student
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  parent_name: { type: string }
+                  vehicle: { type: string }
+                  status: { type: string }
+                  queue_number: { type: string, nullable: true }
+                  eta_min: { type: integer, nullable: true }
+
+  /students/me/notifications:
+    get:
+      summary: Student push notification history
+      tags: [Student App]
+      responses:
+        '200':
+          description: Notifications
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Notification' }
+
+  /students/me/push-token:
+    post:
+      summary: Register FCM/APNs device token for Student App
+      tags: [Student App]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [device_token, platform]
+              properties:
+                device_token: { type: string }
+                platform: { type: string, enum: [ios, android] }
+      responses:
+        '201': { description: Token registered }
+
+  # ── BUSINESS OWNER PORTAL ─────────────────────────────────────
+
+  /owner/schools:
+    get:
+      summary: List all schools on the platform
+      tags: [Business Owner]
+      responses:
+        '200':
+          description: Schools
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/School' }
+    post:
+      summary: Onboard a new school
+      tags: [Business Owner]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                address: { type: string }
+      responses:
+        '201':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/School' }
+          description: ''
+
+  /owner/schools/{school_id}:
+    get:
+      summary: School detail
+      tags: [Business Owner]
+      parameters:
+        - name: school_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/School' }
+          description: ''
+
+  /owner/schools/{school_id}/status:
+    put:
+      summary: Activate or suspend a school
+      tags: [Business Owner]
+      parameters:
+        - name: school_id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status: { type: string, enum: [active, suspended] }
+      responses:
+        '200': { description: Status updated }
+
+  /owner/families:
+    get:
+      summary: All families across all schools
+      tags: [Business Owner]
+      parameters:
+        - name: needs_payout
+          in: query
+          schema: { type: boolean }
+        - name: school_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Families
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Family' }
+
+  /owner/carpool-earnings:
+    get:
+      summary: Carpool earnings pending payout
+      tags: [Business Owner]
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string, enum: [unpaid, paid] }
+        - name: school_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Earnings list
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: string, format: uuid }
+                    driver_id: { type: string, format: uuid }
+                    driver_name: { type: string }
+                    amount: { type: number }
+                    paid_at: { type: string, format: date-time, nullable: true }
+
+  /owner/carpool-earnings/{id}/payout:
+    post:
+      summary: Manually mark a carpool earning as paid out
+      tags: [Business Owner]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200': { description: Payout recorded }
+
+  /owner/revenue:
+    get:
+      summary: Revenue dashboard metrics
+      tags: [Business Owner]
+      parameters:
+        - name: period
+          in: query
+          schema: { type: string, enum: [daily, weekly, monthly, yearly] }
+        - name: school_id
+          in: query
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Revenue metrics
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RevenueStats' }
+
+# ── NEW SCHEMAS ───────────────────────────────────────────────
+# (Appended after paths section \u2014 OpenAPI allows x-components at top level too,
+#  but here we add them inline via the global components.schemas already defined)
+# These are referenced above and must be added to components.schemas.
+# NOTE: OpenAPI does not allow schemas after paths; they must be in components.
+# The schemas below are defined here for reference; in production move them
+# into the components.schemas block at the top of this file.
+#
+# PaymentMethod, AfterscoolActivity, CarpoolSchedule, School,
+# DisplayQueueItem, RevenueStats
+#
+# --- Inline schema definitions (move to components.schemas in final build) ---
+
+x-schemas:
+  PaymentMethod:
+    type: object
+    properties:
+      id: { type: string, format: uuid }
+      user_id: { type: string, format: uuid }
+      method_type: { type: string, enum: [credit_card, bank_account] }
+      card_last4: { type: string, nullable: true }
+      card_brand: { type: string, nullable: true }
+      bank_name: { type: string, nullable: true }
+      bank_account_name: { type: string, nullable: true }
+      is_default: { type: boolean }
+      created_at: { type: string, format: date-time }
+
+  AfterscoolActivity:
+    type: object
+    properties:
+      id: { type: string, format: uuid }
+      student_id: { type: string, format: uuid }
+      activity_date: { type: string, format: date }
+      activity_name: { type: string }
+      end_time: { type: string, nullable: true }
+      source: { type: string, enum: [manual, school_api] }
+
+  CarpoolSchedule:
+    type: object
+    properties:
+      id: { type: string, format: uuid }
+      requester_id: { type: string, format: uuid }
+      driver_id: { type: string, format: uuid }
+      student_id: { type: string, format: uuid }
+      drop_off_address: { type: string }
+      price: { type: number }
+      day_of_week:
+        type: array
+        items: { type: integer }
+      start_date: { type: string, format: date }
+      end_date: { type: string, format: date, nullable: true }
+      is_active: { type: boolean }
+
+  School:
+    type: object
+    properties:
+      id: { type: string, format: uuid }
+      name: { type: string }
+      address: { type: string, nullable: true }
+      logo_url: { type: string, nullable: true }
+      created_at: { type: string, format: date-time }
+
+  DisplayQueueItem:
+    type: object
+    properties:
+      queue_number: { type: string }
+      student_photo: { type: string, nullable: true }
+      student_nickname: { type: string }
+      student_grade: { type: string }
+      driver_photo: { type: string, nullable: true }
+      driver_name: { type: string }
+      car_photo: { type: string, nullable: true }
+      license_plate: { type: string }
+
+  RevenueStats:
+    type: object
+    properties:
+      revenue: { type: number }
+      expenses: { type: number }
+      gross_margin: { type: number }
+      gross_margin_pct: { type: number }
+      paid_pickups: { type: integer }
+      chart_data:
+        type: array
+        items:
+          type: object
+          properties:
+            date: { type: string }
+            revenue: { type: number }

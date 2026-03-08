@@ -11,7 +11,7 @@ const config: ZudokuConfig = {
   navigation: [
     {
       type: "category",
-      label: "Documentation",
+      label: "API Documentation",
       items: [
         {
           type: "category",
