@@ -1,11 +1,17 @@
 openapi: 3.0.3
+
 info:
   title: School Pickup & Carpool API
-  description: API for school pickup and carpool coordination platform (Mobile + Staff + Admin).
+  description: API for Mobile + Staff + Admin.
   version: 1.0.0
+
 servers:
-  - url: https://api.schoolpickup.com/api/v1
+  - url: https://api.production.com/api/v1
     description: Production
+  - url: https://api.uat.com/api/v1
+    description: UAT
+  - url: https://api.dev.com/api/v1
+    description: DEV
 
 components:
   securitySchemes:
@@ -21,7 +27,6 @@ components:
       bearerFormat: JWT
 
   schemas:
-
     TokenResponse:
       type: object
       properties:
@@ -29,6 +34,11 @@ components:
         refresh_token: { type: string }
         token_type: { type: string, example: Bearer }
         expires_in: { type: integer, example: 3600 }
+        user_id: { type: string, format: uuid }
+        role:
+          type: string
+          enum: [primary_parent, additional_parent, supplementary, staff, coordinator, guard, admin, owner]
+          description: Role of the authenticated user — use this to show/hide UI elements on the client side
 
     User:
       type: object
@@ -104,6 +114,7 @@ components:
         model: { type: string }
         year: { type: integer, nullable: true }
         color: { type: string, nullable: true }
+        vehicle_photo_url: { type: string, nullable: true }
         status:
           type: string
           enum: [pending, approved, rejected]
@@ -148,6 +159,8 @@ components:
           type: string
           enum: [registered, taxi]
         taxi_number: { type: string, nullable: true }
+        taxi_color: { type: string, nullable: true }
+        taxi_notes: { type: string, nullable: true }
         status:
           type: string
           enum: [idle, pre_queue, queued, ready, in_progress, completed, cancelled, no_show]
@@ -280,7 +293,7 @@ components:
         is_default: { type: boolean }
         created_at: { type: string, format: date-time }
 
-    AfterscoolActivity:
+    AfterschoolActivity:
       type: object
       properties:
         id: { type: string, format: uuid }
@@ -348,9 +361,6 @@ security:
   - bearerAuth: []
 
 paths:
-
-  # ── AUTH ─────────────────────────────────────────────────────
-
   /oauth/token:
     post:
       summary: Get access token (login / refresh)
@@ -467,8 +477,6 @@ paths:
       responses:
         '204': { description: Logged out }
 
-  # ── USERS ─────────────────────────────────────────────────────
-
   /users/me:
     get:
       summary: Get current user profile
@@ -497,8 +505,6 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/User' }
           description: ''
-
-  # ── FAMILIES ──────────────────────────────────────────────────
 
   /families/me:
     get:
@@ -758,8 +764,6 @@ paths:
       responses:
         '204': { description: Deleted }
 
-  # ── VEHICLES ──────────────────────────────────────────────────
-
   /vehicles/me:
     get:
       summary: List my vehicles
@@ -839,8 +843,6 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         '200': { description: Default updated }
-
-  # ── PICKUPS ───────────────────────────────────────────────────
 
   /pickups:
     post:
@@ -959,8 +961,6 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Pickup' }
           description: ''
-
-  # ── CARPOOLS ──────────────────────────────────────────────────
 
   /carpools/requests/mine:
     get:
@@ -1133,8 +1133,6 @@ paths:
               schema: { $ref: '#/components/schemas/CarpoolEarnings' }
           description: ''
 
-  # ── NOTIFICATIONS ─────────────────────────────────────────────
-
   /notifications:
     get:
       summary: Get notifications
@@ -1187,8 +1185,6 @@ paths:
       tags: [Notifications]
       responses:
         '200': { description: All marked as read }
-
-  # ── STAFF ─────────────────────────────────────────────────────
 
   /staff/queue/stats:
     get:
@@ -1286,8 +1282,6 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Pickup' }
           description: ''
-
-  # ── ADMIN ─────────────────────────────────────────────────────
 
   /admin/dashboard/stats:
     get:
@@ -1680,8 +1674,6 @@ paths:
           description: ''
         '204': { description: Deactivated }
 
-  # ── ADMIN: Afterschool Activities ────────────────────────────
-
   /admin/students/{student_id}/afterschool:
     get:
       summary: List afterschool activities for a student
@@ -1698,7 +1690,7 @@ paths:
             application/json:
               schema:
                 type: array
-                items: { $ref: '#/components/schemas/AfterscoolActivity' }
+                items: { $ref: '#/components/schemas/AfterschoolActivity' }
     post:
       summary: Add an afterschool activity
       tags: [Admin Portal]
@@ -1722,7 +1714,7 @@ paths:
         '201':
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/AfterscoolActivity' }
+              schema: { $ref: '#/components/schemas/AfterschoolActivity' }
           description: ''
 
   /admin/afterschool/{activity_id}:
@@ -1736,8 +1728,6 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         '204': { description: Deleted }
-
-  # ── ADMIN: Carpool Ban ────────────────────────────────────────
 
   /admin/families/{family_id}/carpool-ban:
     put:
@@ -1769,8 +1759,6 @@ paths:
           schema: { type: string, format: uuid }
       responses:
         '200': { description: Carpool ban lifted }
-
-  # ── PAYMENT METHODS ───────────────────────────────────────────
 
   /payment-methods:
     get:
@@ -1851,8 +1839,6 @@ paths:
       responses:
         '200': { description: Default updated }
 
-  # ── AFTERSCHOOL CHECK (Parent) ────────────────────────────────
-
   /students/{student_id}/afterschool-today:
     get:
       summary: Check if student has afterschool activity today
@@ -1874,8 +1860,6 @@ paths:
                   activity_name: { type: string, nullable: true }
                   end_time: { type: string, nullable: true }
 
-  # ── PICKUPS: Family Active Check ──────────────────────────────
-
   /pickups/family-active:
     get:
       summary: Check if another family member has an active pickup
@@ -1892,8 +1876,6 @@ paths:
                   parent_name: { type: string, nullable: true }
                   status: { type: string, nullable: true }
                   queue_number: { type: string, nullable: true }
-
-  # ── CARPOOL SCHEDULES ─────────────────────────────────────────
 
   /carpools/schedules/mine:
     get:
@@ -1969,8 +1951,6 @@ paths:
       responses:
         '204': { description: Cancelled }
 
-  # ── STAFF: Nearby, All, Unmark ────────────────────────────────
-
   /staff/pickups/nearby:
     get:
       summary: Pickups whose parents are within radius (pre_queue)
@@ -2021,8 +2001,6 @@ paths:
               schema: { $ref: '#/components/schemas/Pickup' }
           description: ''
 
-  # ── TV / DISPLAY ──────────────────────────────────────────────
-
   /display/queue:
     get:
       summary: Read-only queue feed for TV display (school-scoped display token)
@@ -2056,8 +2034,6 @@ paths:
                 properties:
                   token: { type: string }
                   expires_at: { type: string, format: date-time }
-
-  # ── STUDENT APP ───────────────────────────────────────────────
 
   /auth/student/register:
     post:
@@ -2139,8 +2115,6 @@ paths:
                 platform: { type: string, enum: [ios, android] }
       responses:
         '201': { description: Token registered }
-
-  # ── BUSINESS OWNER PORTAL ─────────────────────────────────────
 
   /owner/schools:
     get:
@@ -2288,19 +2262,6 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/RevenueStats' }
 
-# ── NEW SCHEMAS ───────────────────────────────────────────────
-# (Appended after paths section \u2014 OpenAPI allows x-components at top level too,
-#  but here we add them inline via the global components.schemas already defined)
-# These are referenced above and must be added to components.schemas.
-# NOTE: OpenAPI does not allow schemas after paths; they must be in components.
-# The schemas below are defined here for reference; in production move them
-# into the components.schemas block at the top of this file.
-#
-# PaymentMethod, AfterscoolActivity, CarpoolSchedule, School,
-# DisplayQueueItem, RevenueStats
-#
-# --- Inline schema definitions (move to components.schemas in final build) ---
-
 x-schemas:
   PaymentMethod:
     type: object
@@ -2315,7 +2276,7 @@ x-schemas:
       is_default: { type: boolean }
       created_at: { type: string, format: date-time }
 
-  AfterscoolActivity:
+  AfterschoolActivity:
     type: object
     properties:
       id: { type: string, format: uuid }

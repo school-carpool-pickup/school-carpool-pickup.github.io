@@ -4,7 +4,7 @@ const config: ZudokuConfig = {
   site: {
     logo: {
       src: { light: "/logo-light.svg", dark: "/logo-dark.svg" },
-      alt: "Zudoku",
+      alt: "School",
       width: "130px",
     },
   },
@@ -22,26 +22,8 @@ const config: ZudokuConfig = {
             {
               type: "link",
               icon: "folder-cog",
-              badge: {
-                label: "New",
-                color: "purple",
-              },
               label: "API Reference",
               to: "/api",
-            },
-          ],
-        },
-        {
-          type: "category",
-          label: "Useful Links",
-          collapsible: false,
-          icon: "link",
-          items: [
-            {
-              type: "link",
-              icon: "book",
-              label: "Zudoku Docs",
-              to: "https://zudoku.dev/docs/",
             },
           ],
         },

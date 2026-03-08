@@ -1,16 +1,253 @@
 ---
-title: Welcome to API Doc
+title: API Documentation
 ---
 
-Thanks for choosing to use Zudoku to power your API documentation!
+# Solution Architecture Proposal
 
-## Edit this page
+### School Pickup Management Platform
 
-To edit this page, open the `pages/introduction.mdx` file.
+**Date:** March 2026\
+**Budget Tier:** Mid-Range (Cost-Effective, Fast Time-to-Market, Low Monthly
+Running Cost)
 
-## Configuration
+---
 
-You can find the full configuration for your Zudoku site in the `zudoku.config.tsx` file.
+## Executive Summary
 
-For further information on how to customize your site, check out the
-[Zudoku documentation](https://zudoku.dev/docs).
+This document outlines the proposed software architecture for the **School
+Pickup Management Platform** — a mobile and web solution designed to streamline
+student pickup operations, enable parent-to-parent carpooling, and provide
+school administrators with real-time queue management.
+
+The architecture is designed around three core principles:
+
+| Principle                | Description                                                           |
+| ------------------------ | --------------------------------------------------------------------- |
+| 🚀 **Fast to Market**    | Leveraging managed services (BaaS) to minimize development time       |
+| 💰 **Cost-Effective**    | Serverless infrastructure that scales to zero during off-peak hours   |
+| 🔒 **Reliable & Secure** | Proven third-party integrations for auth, payments, and notifications |
+
+---
+
+## 1. System Architecture Overview
+
+The system follows a **Modular Monolith** pattern — simple to maintain and
+operate, while still capable of handling the peak load during school dismissal
+hours (morning drop-off and afternoon pickup).
+
+### Architecture Diagram
+![System Architecture Diagram](https://school-carpool-pickup.github.io/diagram.png)
+
+---
+
+## 2. Technology Stack
+
+### Why These Technologies?
+
+| Layer                   | Technology                        | Rationale                                                                                                     |
+| ----------------------- | --------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| **Mobile App**          | React Native (iOS + Android)      | Single codebase for both platforms — cuts mobile development cost in half                                     |
+| **Web (Staff & Admin)** | React.js / Next.js                | Rich template ecosystem; fast dashboard development; free hosting on Vercel                                   |
+| **Backend API**         | Go on Google Cloud Run            | High performance; serverless (pay-per-use); scales to zero at night — ideal for peak-only usage patterns      |
+| **Database & Auth**     | Supabase (PostgreSQL)             | Managed database with built-in Auth and real-time subscriptions — saves weeks of boilerplate development      |
+| **Real-time Queue**     | Redis Pub/Sub                     | Low-latency event broadcasting to TV displays, staff portal, and parent apps without overloading the database |
+| **Push Notifications**  | LINE Notify + Firebase FCM / APNs | Covers LINE (widely used in Thailand) and native push for iOS and Android                                     |
+| **Payments**            | Stripe Connect                    | Industry-standard marketplace payment infrastructure; handles KYC, payout splits, and compliance              |
+
+---
+
+## 3. Backend Modules
+
+The backend is organized into six functional modules:
+
+### 3.1 Identity & Access Module
+
+- Authentication via **Supabase Auth** (Email/Password + LINE OAuth)
+- **Role-Based Access Control (RBAC)** across all user types:
+
+  | Role                | Description                                            |
+  | ------------------- | ------------------------------------------------------ |
+  | `primary_parent`    | Primary account holder; full family management         |
+  | `additional_parent` | Secondary adult authorized to pick up                  |
+  | `supplementary`     | Additional authorized pickup person (e.g. grandparent) |
+  | `coordinator`       | Carpool coordinator                                    |
+  | `guard`             | School gate security                                   |
+  | `staff`             | School administrative staff                            |
+  | `admin`             | School system administrator                            |
+  | `owner`             | Business/platform owner                                |
+
+- **Invitation System:** Secure email invite links with 7-day TTL — used for
+  onboarding family members and school staff
+
+---
+
+### 3.2 Core Domain Module
+
+- **School & Student Engine:** Manages student profiles (grade, section, medical
+  info, emergency contacts, preferred gate, photo consent)
+- **Family Engine:** Links multiple users into a single family unit with
+  per-role permission management
+- **Vehicle Management:** License plate registration, document verification,
+  admin approval workflow
+
+---
+
+### 3.3 Pickup & Queue Engine _(Core Feature)_
+
+This is the heart of the platform.
+
+**Two-Layer Geofencing:**
+
+```
+500m radius → status: pre_queue   (parent is approaching)
+BLE Beacon  → status: queued      (parent has arrived at gate → assigned queue number)
+```
+
+- **Real-time Queue Broadcasting:** Redis Pub/Sub pushes queue events via
+  WebSocket to the TV display, Staff Portal, and Parent App instantly — without
+  hitting the database
+- **Dynamic Lane Management:** Admin can configure lanes (A / B / C) with
+  configurable capacity at any time
+- **Handoff Confirmation:** Staff confirms student handoff → immediate push
+  notification to parent
+
+---
+
+### 3.4 Carpool & Financial Module
+
+- **Driver Availability Toggle:** Drivers can enable/disable availability with
+  real-time location sharing
+- **Match Engine:** Automatically pairs carpool requests with available drivers
+  at the same school
+- **Recurring Schedules:** Supports weekly recurring carpool bookings (e.g. Mon
+  / Wed / Fri) — auto-generates daily requests
+- **Earnings Tracking:** Records per-trip earnings before triggering Stripe
+  payout
+
+**Stripe Connect Payment Flow:**
+
+```
+1. Parent agrees to hire → Authorize (hold funds on card)
+2. Driver completes drop-off → Capture (charge card)
+3. Stripe automatically splits payment:
+   - Driver receives their payout
+   - Platform retains commission
+```
+
+> No manual reconciliation needed at month-end — the platform handles it
+> automatically.
+
+---
+
+### 3.5 Student App & Notification Module
+
+- Student registration via school email (verified through School Email API)
+- Students can view: who is picking them up, pickup status, and their queue
+  number
+- Push notifications (FCM / APNs) triggered when parent's car is near the school
+- **After-School Activities Feed:** Displayed in the pickup flow before a parent
+  initiates pickup
+
+---
+
+### 3.6 Business Owner Module
+
+- **School CRM:** Onboard and manage schools; view per-school statistics
+- **Revenue Dashboard:** Real-time revenue tracking (daily / weekly / monthly /
+  yearly), gross margin, pending payouts
+- **Payout CRM:** View outstanding driver earnings and trigger manual payouts
+  when needed
+
+---
+
+## 4. Third-Party Integrations
+
+### 4.1 Bluetooth Low Energy (BLE) Beacons
+
+**Problem:** GPS-only geofencing suffers from battery drain and inaccuracy —
+especially in urban / indoor environments near school gates.
+
+**Solution:** Install BLE Beacons at school gates (hardware cost: ~300–1,000 THB
+per unit).
+
+**How it works:**
+
+1. Parent's phone detects BLE beacon signal within ~10–50 meters of the gate
+2. App automatically sends an API request: _"Vehicle has arrived at gate —
+   assign queue number"_
+3. Queue number is issued and broadcast in real-time
+
+**Benefits:** More accurate than GPS; minimal battery impact; no ongoing API
+costs.
+
+---
+
+### 4.2 Maps & Routing (OSRM vs. Google Maps)
+
+We recommend a **Hybrid Approach** to balance accuracy and cost:
+
+| Use Case                                | Recommended Service                  | Reason                                                               |
+| --------------------------------------- | ------------------------------------ | -------------------------------------------------------------------- |
+| Carpool matching (distance within 1 km) | **OSRM / PostGIS (Haversine)**       | Free; no real-time traffic needed for proximity matching             |
+| Map tiles (in-app display)              | **Mapbox or Google Maps Mobile SDK** | Free map rendering on native mobile; no API billing for tile viewing |
+| Arrival detection (geofencing)          | **Native iOS / Android geofencing**  | Built-in device capability; zero API cost                            |
+| Turn-by-turn navigation                 | **Google Maps (optional)**           | Only if precise ETA with live traffic is required                    |
+
+> **Cost Impact:** Using OSRM for carpool matching alone can eliminate 100% of
+> Google Maps routing API costs while maintaining sufficient precision.
+
+---
+
+### 4.3 Payments — Stripe Connect (Marketplace Model)
+
+The platform operates as a **marketplace intermediary** between parents (payers)
+and drivers (recipients).
+
+**Onboarding:**
+
+- Drivers complete Stripe KYC to receive payouts directly to their bank account
+- Parents add a credit/debit card for payment authorization
+
+**Transaction Flow:**
+
+| Step | Event              | Action                                              |
+| ---- | ------------------ | --------------------------------------------------- |
+| 1    | Carpool agreed     | **Authorize** — funds held on parent's card         |
+| 2    | Drop-off confirmed | **Capture** — payment processed                     |
+| 3    | Automatic split    | Platform retains commission; driver receives payout |
+
+> No manual accounting or end-of-month reconciliation required.
+
+---
+
+## 5. Infrastructure & Cost Summary
+
+| Component          | Service                           | Billing Model               |
+| ------------------ | --------------------------------- | --------------------------- |
+| Backend API        | GCP Cloud Run                     | Per-request (scale to zero) |
+| Database           | Supabase PostgreSQL               | Free tier → Flat monthly    |
+| Auth               | Supabase Auth                     | Included                    |
+| Real-time          | Redis (Upstash)                   | Per-command (very low)      |
+| Web Hosting        | Cloudflare Pages                  | Free tier                   |
+| Push Notifications | Firebase FCM                      | Free                        |
+| LINE Notifications | LINE Notify API                   | Free                        |
+| Maps (Routing)     | OSRM (self-hosted)                | Hosting cost only           |
+| Map Tiles          | Google Maps / Mapbox (mobile SDK) | Free (tile rendering)       |
+| Payments           | Stripe Connect                    | % per transaction           |
+| BLE Beacons        | Hardware (one-time)               | 300–1,000 THB / unit        |
+
+> **Key Cost Advantage:** Because school pickups are concentrated in ~2-hour
+> windows (morning and afternoon), Cloud Run's scale-to-zero model means you pay
+> for compute only when users are active — significantly reducing monthly
+> running costs compared to always-on servers.
+
+---
+
+## 6. Security Considerations
+
+- All API endpoints are protected by **JWT tokens** issued by Supabase Auth
+- Role-based access enforced at the API layer — no client-side trust
+- Stripe KYC ensures driver identity verification before any payout
+- Student data (medical info, emergency contacts, photo consent) stored with
+  row-level security in Supabase PostgreSQL
+- Invite tokens are time-limited (7-day TTL) and single-use
