@@ -1,5 +1,10 @@
 import type { ZudokuConfig } from "zudoku";
 
+if (typeof globalThis !== "undefined" && !globalThis.requestIdleCallback) {
+  globalThis.requestIdleCallback = (cb) => setTimeout(cb, 1);
+  globalThis.cancelIdleCallback = (id) => clearTimeout(id);
+}
+
 const config: ZudokuConfig = {
   site: {
     logo: {
