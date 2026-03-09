@@ -37,7 +37,7 @@ components:
         user_id: { type: string, format: uuid }
         role:
           type: string
-          enum: [primary_parent, additional_parent, supplementary, staff, coordinator, guard, admin, owner]
+          enum: [primary_parent, additional_parent, supplementary, staff, admin, owner]
           description: Role of the authenticated user — use this to show/hide UI elements on the client side
 
     User:
@@ -51,7 +51,7 @@ components:
         phone: { type: string }
         role:
           type: string
-          enum: [primary_parent, additional_parent, supplementary, staff, coordinator, guard, admin, owner]
+          enum: [primary_parent, additional_parent, supplementary, staff, admin, owner]
         status:
           type: string
           enum: [active, pending, suspended, banned]
@@ -1447,7 +1447,7 @@ paths:
       parameters:
         - name: role
           in: query
-          schema: { type: string, enum: [admin, coordinator, staff, guard] }
+          schema: { type: string, enum: [admin, staff] }
         - name: status
           in: query
           schema: { type: string, enum: [active, pending, suspended] }
@@ -1477,7 +1477,7 @@ paths:
               properties:
                 email: { type: string }
                 full_name: { type: string }
-                role: { type: string, enum: [admin, coordinator, staff, guard] }
+                role: { type: string, enum: [admin, staff] }
       responses:
         '201':
           content:
