@@ -34,11 +34,13 @@ components:
         refresh_token: { type: string }
         token_type: { type: string, example: Bearer }
         expires_in: { type: integer, example: 3600 }
-        user_id: { type: string, format: uuid }
-        role:
-          type: string
-          enum: [primary_parent, additional_parent, supplementary, staff, admin, owner]
-          description: Role of the authenticated user — use this to show/hide UI elements on the client side
+        user_id: { type: string }
+        roles:
+          type: array
+          items:
+            type: string
+            enum: [primary_parent, additional_parent, supplementary, staff, admin, owner]
+          description: Roles of the authenticated user — use this to show/hide UI elements on the client side
 
     User:
       type: object
@@ -386,7 +388,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TokenResponse' }
 
-  /auth/register:
+  /api/v1/auth/register:
     post:
       summary: Register as primary parent
       tags: [Authentication]
@@ -404,9 +406,26 @@ paths:
                 full_name: { type: string }
                 phone: { type: string }
       responses:
-        '201': { description: "Account created. OTP sent to email." }
+        '201':
+          description: Account created, returns created user
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/User' }
+        '400':
+          description: Invalid body request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Registration failed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
-  /auth/verify-otp:
+  /api/v1/auth/verify-otp:
     post:
       summary: Verify email OTP
       tags: [Authentication]
@@ -428,7 +447,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TokenResponse' }
 
-  /auth/invitations/{token}:
+  /api/v1/auth/invitations/{token}:
     get:
       summary: Validate invite token and get pre-filled info
       tags: [Authentication]
@@ -446,7 +465,7 @@ paths:
               schema: { $ref: '#/components/schemas/Invitation' }
         '404': { description: Token not found or expired }
 
-  /auth/invitations/accept:
+  /api/v1/auth/invitations/accept:
     post:
       summary: Accept invitation and create account
       tags: [Authentication]
@@ -470,12 +489,92 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TokenResponse' }
 
-  /auth/logout:
+  /api/v1/auth/logout:
     post:
       summary: Revoke current token
       tags: [Authentication]
       responses:
         '204': { description: Logged out }
+
+  # ── OTP ───────────────────────────────────────────────────────
+
+  /api/v1/otp/send:
+    post:
+      summary: Send OTP to email
+      tags: [OTP]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: otp sent }
+                  reference: { type: string, example: REF-XXXXXX }
+        '400':
+          description: Invalid body request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Failed to send email
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/v1/otp/:
+    post:
+      summary: Verify OTP by reference
+      tags: [OTP]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reference, otp]
+              properties:
+                reference: { type: string }
+                otp: { type: string }
+      responses:
+        '200':
+          description: OTP verified successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: otp verified }
+        '400':
+          description: Invalid body request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Invalid OTP or expired
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string, example: invalid otp or expired }
+        '500':
+          description: Could not verify OTP
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
   /users/me:
     get:

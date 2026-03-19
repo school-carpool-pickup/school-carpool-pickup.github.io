@@ -24,12 +24,6 @@ const config: ZudokuConfig = {
           icon: "sparkles",
           items: [
             "/introduction",
-            {
-              type: "link",
-              icon: "folder-cog",
-              label: "API Reference",
-              to: "/api",
-            },
           ],
         },
       ],
@@ -39,6 +33,12 @@ const config: ZudokuConfig = {
       to: "/api",
       label: "API Reference",
     },
+    {
+      type: "link",
+      to: "https://dbdocs.io/mossnana/school-pickup",
+      label: "Database Schema",
+      icon: "database",
+    }
   ],
   redirects: [{ from: "/", to: "/introduction" }],
   apis: [
