@@ -26,6 +26,14 @@ const config: ZudokuConfig = {
             "/introduction",
           ],
         },
+        {
+          type: "category",
+          label: "Business flows",
+          icon: "workflow",
+          items: [
+            "/primary-parent-registration",
+          ],
+        },
       ],
     },
     {
