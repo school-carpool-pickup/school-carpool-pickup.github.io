@@ -32,6 +32,7 @@ const config: ZudokuConfig = {
           icon: "workflow",
           items: [
             "/primary-parent-registration",
+            "/parent-mobile-login"
           ],
         },
       ],

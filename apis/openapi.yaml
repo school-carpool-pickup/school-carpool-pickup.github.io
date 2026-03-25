@@ -376,11 +376,12 @@ paths:
               type: object
               required: [grant_type, client_id]
               properties:
-                grant_type: { type: string, enum: [password, refresh_token] }
+                grant_type: { type: string, enum: [password, refresh_token, "urn:ietf:params:oauth:grant-type:jwt-bearer"] }
                 client_id: { type: string }
                 username: { type: string }
                 password: { type: string }
                 refresh_token: { type: string }
+                assertion: { type: string }
       responses:
         '200':
           description: Token issued
@@ -510,13 +511,6 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/TokenResponse' }
 
-  /api/v1/auth/logout:
-    post:
-      summary: Revoke current token
-      tags: [Authentication]
-      responses:
-        '204': { description: Logged out }
-
   # ── OTP ───────────────────────────────────────────────────────
 
   /api/v1/otp/onboarding:
@@ -589,6 +583,82 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Invalid OTP or expired
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Could not verify OTP
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/v1/otp/login:
+    post:
+      summary: Send OTP to phone
+      tags: [OTP]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [phone]
+              properties:
+                phone: { type: string }
+      responses:
+        '200':
+          description: OTP sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      message: { type: string, example: otp sent }
+                      reference: { type: string, example: REF-XXXXXX }
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Failed to send SMS
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/v1/otp/login/verify:
+    post:
+      summary: Verify login OTP and get assertion token
+      tags: [OTP]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reference, otp]
+              properties:
+                reference: { type: string }
+                otp: { type: string }
+      responses:
+        '200':
+          description: OTP verified successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      assertion: { type: string }
         '401':
           description: Invalid OTP or expired
           content:
