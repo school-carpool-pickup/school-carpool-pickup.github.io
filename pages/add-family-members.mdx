@@ -1,0 +1,30 @@
+---
+title: Add family members
+---
+
+## Sequence diagram
+
+```mermaid
+sequenceDiagram
+    actor pp as primary-parent
+    participant bs as backend-service
+    participant smtp as SMTP
+
+    pp ->> bs: invite other member<br/>POST /api/v1/families/me/invitations
+    bs ->> bs: check exist user with email
+    alt exist
+    bs ->> pp: can not invite
+    note over pp, bs: end process
+    end
+    bs -->> pp: success
+    note over bs: run routine background job
+    bs ->> bs: validate email is in authorized school domain
+    bs ->> smtp: send invite link<br/>to: invitee email<br/>subject: Invitation from {primary_parent_name}
+    create participant in as invitee
+    smtp ->> in: receive invite link
+    in ->> bs: client invite link (token assertion with 3 minutes expired)<br/>/api/v1/invitations/{invite_token}
+    bs ->> in: registration token
+    in ->> bs: Input register information<br/>/api/v1/invitations/accept
+    bs ->> in: <<completed invite other family members flow>>
+    destroy in
+```

@@ -1,4 +1,5 @@
 import type { ZudokuConfig } from "zudoku";
+import rehypeMermaid from "rehype-mermaid";
 
 if (typeof globalThis !== "undefined" && !globalThis.requestIdleCallback) {
   globalThis.requestIdleCallback = (cb) => setTimeout(cb, 1);
@@ -32,7 +33,8 @@ const config: ZudokuConfig = {
           icon: "workflow",
           items: [
             "/primary-parent-registration",
-            "/parent-mobile-login"
+            "/parent-mobile-login",
+            "/add-family-members"
           ],
         },
       ],

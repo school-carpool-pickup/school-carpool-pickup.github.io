@@ -46,7 +46,8 @@ components:
         id: { type: string, format: uuid }
         school_id: { type: string, format: uuid }
         family_id: { type: string, format: uuid, nullable: true }
-        full_name: { type: string }
+        first_name: { type: string }
+        last_name: { type: string }
         email: { type: string, format: email }
         phone: { type: string }
         role:
@@ -62,6 +63,33 @@ components:
         line_id: { type: string, nullable: true }
         profile_complete: { type: boolean }
         last_login: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+
+    Family:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        school_id: { type: string, format: uuid }
+        family_name: { type: string }
+        status: { type: string }
+        joined_at: { type: string, format: date-time }
+        members:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+
+    Invitation:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        family_id: { type: string, format: uuid }
+        school_id: { type: string, format: uuid }
+        inviter_id: { type: string, format: uuid }
+        invitee_email: { type: string, format: email }
+        invitee_role: { type: string }
+        invite_code: { type: string }
+        status: { type: string }
+        expires_at: { type: string, format: date-time }
         created_at: { type: string, format: date-time }
 
     Error:
@@ -138,6 +166,97 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
         '500':
           description: Registration failed
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/v1/auth/validate:
+    post:
+      summary: Validate access token
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [access_token]
+              properties:
+                access_token: { type: string }
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      valid: { type: boolean }
+        '401':
+          description: Token is invalid or expired
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/v1/auth/invitations/{token}:
+    get:
+      summary: Validate invitation token
+      tags: [Authentication]
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Token is valid
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Invitation' }
+        '404':
+          description: Token not found or expired
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/v1/auth/invitations/accept:
+    post:
+      summary: Accept invitation
+      tags: [Authentication]
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token, firstName, lastName, phone, password]
+              properties:
+                token: { type: string }
+                firstName: { type: string }
+                lastName: { type: string }
+                phone: { type: string }
+                password: { type: string }
+      responses:
+        '201':
+          description: Invitation accepted, user created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/User' }
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
@@ -298,3 +417,86 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Error' }
+
+  /api/v1/families/me:
+    get:
+      summary: Get current user's family
+      tags: [Family]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Family' }
+        '500':
+          description: Internal server error
+
+  /api/v1/families/me/members:
+    get:
+      summary: List members of current user's family
+      tags: [Family]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/User' }
+        '500':
+          description: Internal server error
+
+  /api/v1/families/me/members/{user_id}:
+    delete:
+      summary: Remove a member from current user's family
+      tags: [Family]
+      parameters:
+        - name: user_id
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Member removed
+        '400':
+          description: Invalid user ID
+        '500':
+          description: Internal server error
+
+  /api/v1/families/me/invitations:
+    get:
+      summary: List sent invitations for current user's family
+      tags: [Family]
+      responses:
+        '200':
+          description: Success
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Invitation' }
+        '500':
+          description: Internal server error
+    post:
+      summary: Invite a new family member
+      tags: [Family]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email: { type: string, format: email }
+                role: { type: string }
+      responses:
+        '201':
+          description: Invitation sent
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Invitation' }
+        '500':
+          description: Internal server error
