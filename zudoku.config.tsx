@@ -39,8 +39,13 @@ const config: ZudokuConfig = {
     },
     {
       type: "link",
-      to: "/api",
-      label: "API Reference",
+      to: "/api-current",
+      label: "API Reference (current)",
+    },
+    {
+      type: "link",
+      to: "/api-design",
+      label: "API Reference (design)",
     },
     {
       type: "link",
@@ -53,9 +58,14 @@ const config: ZudokuConfig = {
   apis: [
     {
       type: "file",
-      input: "./apis/openapi.yaml",
-      path: "/api",
+      input: "./apis/openapi_current.yaml",
+      path: "/api-current",
     },
+    {
+      type: "file",
+      input: "./apis/openapi_design.yaml",
+      path: "/api-design",
+    }
   ],
 };
 
