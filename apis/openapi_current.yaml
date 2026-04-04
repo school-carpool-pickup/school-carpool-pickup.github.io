@@ -434,6 +434,7 @@ paths:
   /api/v1/families/me/members:
     get:
       summary: List members of current user's family
+      description: Roles allowed - PrimaryParent, AdditionalParent
       tags: [Family]
       responses:
         '200':
@@ -500,3 +501,104 @@ paths:
               schema: { $ref: '#/components/schemas/Invitation' }
         '500':
           description: Internal server error
+
+  /api/v1/students/me/invitations:
+    post:
+      summary: Invite a student to a family
+      description: Requires RolePrimaryParent. Invites a registered student to join the family via email.
+      tags: [Student]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+      responses:
+        '200':
+          description: Invitation sent successfully, returns reference number
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ref_number: { type: string }
+        '400':
+          description: Invalid body request
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: User not found or Student not registered
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '409':
+          description: Student already joined another family
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /api/v1/students/me/invitations/verify:
+    post:
+      summary: Confirm student invitation
+      description: Requires RolePrimaryParent. Verifies an OTP code to confirm a student invitation.
+      tags: [Student]
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [ref_number, otp_code]
+              properties:
+                ref_number: { type: string }
+                otp_code: { type: string }
+      responses:
+        '200':
+          description: Invitation confirmed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  name: { type: string }
+                  email: { type: string, format: email }
+                  family_id: { type: string, format: uuid }
+        '400':
+          description: Invalid body request or Invalid OTP
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '401':
+          description: Unauthorized
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '404':
+          description: Student not found
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
