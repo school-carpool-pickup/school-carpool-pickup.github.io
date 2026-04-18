@@ -1,5 +1,5 @@
+/* eslint-disable no-undef */
 import type { ZudokuConfig } from "zudoku";
-import rehypeMermaid from "rehype-mermaid";
 
 if (typeof globalThis !== "undefined" && !globalThis.requestIdleCallback) {
   globalThis.requestIdleCallback = (cb) => setTimeout(cb, 1);
@@ -34,7 +34,9 @@ const config: ZudokuConfig = {
           items: [
             "/primary-parent-registration",
             "/parent-mobile-login",
-            "/add-family-members"
+            "/add-family-members",
+            "/add-student-members",
+            "/pickup-student",
           ],
         },
       ],
@@ -58,11 +60,6 @@ const config: ZudokuConfig = {
   ],
   redirects: [{ from: "/", to: "/introduction" }],
   apis: [
-    {
-      type: "file",
-      input: "./apis/openapi_current.yaml",
-      path: "/api-current",
-    },
     {
       type: "file",
       input: "./apis/openapi_design.yaml",
