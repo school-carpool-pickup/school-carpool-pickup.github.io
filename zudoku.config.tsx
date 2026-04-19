@@ -29,7 +29,7 @@ const config: ZudokuConfig = {
         },
         {
           type: "category",
-          label: "Business flows",
+          label: "Features",
           icon: "workflow",
           items: [
             "/primary-parent-registration",
@@ -40,11 +40,6 @@ const config: ZudokuConfig = {
           ],
         },
       ],
-    },
-    {
-      type: "link",
-      to: "/api-current",
-      label: "API Reference (current)",
     },
     {
       type: "link",
