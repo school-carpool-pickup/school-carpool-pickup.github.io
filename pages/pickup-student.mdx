@@ -6,15 +6,13 @@ title: Pickup Student
 
 ## Overview
 
-A **Pickup** represents a parent's intent to pick up one or more of their children from school. Parents initiate a pickup session, which is placed into a school-managed queue. The pickup progresses through lifecycle stages from `pending` → `queued` → `geofence` → `beacon` → `completed` (or `cancelled`). Redis manages the real-time queue; PostgreSQL (via Ent ORM) is the source of truth for persistence.
+A **Pickup** represents a parent's intent to pick up one or more of their children from school. Parents initiate a pickup session, which is placed into a school-managed queue. The pickup progresses through lifecycle stages from `active` → `prepare` → `queued` → `completed` (or `cancelled`). Redis manages the real-time queue; PostgreSQL (via Ent ORM) is the source of truth for persistence.
 
 ## Functional Requirements
 
-- `primary_parent` and `additional_parent` can **create** and **cancel** a pickup
-- `primary_parent`, `additional_parent`, and `supplementary` (same family) can **read** and **update** a pickup
-- Same-family members can view the list, detail, and queue position of any pickup
-- On creation, the parent selects one or more enrolled children and an approved vehicle
-- On update, the parent sends GPS position; backend calculates stage and optionally associates a device ID
+- `primary_parent` and `additional_parent` can **create**, **read**, **update**, and **cancel** a pickup
+- On creation, the parent selects one or more enrolled children and an approved vehicle (or chooses walking mode)
+- On update, the parent sends GPS position; backend calculates stage transition and optionally associates a device ID
 - A pickup is **soft-deleted** (cancelled); never hard-deleted
 
 ## Non-Functional Requirements
@@ -32,28 +30,37 @@ A **Pickup** represents a parent's intent to pick up one or more of their childr
 | ---- | :----: | :--: | :----: | :----: |
 | `primary_parent` | ✅ | ✅ | ✅ | ✅ |
 | `additional_parent` | ✅ | ✅ | ✅ | ✅ |
-| `supplementary` | ❌ | ✅ | ✅ | ❌ |
+| `supplementary` | ❌ | ❌ | ❌ | ❌ |
 
 > JWT claims required in context: `user_id`, `family_id`, `school_id`
 
 ## Pickup Lifecycle (Stages)
 
 ```
-pending(0) → queued(1) → geofence(2) → beacon(3) → completed(4)
-                      ↘           ↘          ↘
-                                    cancelled(-1)
+active(0) → prepare(1) → queued(2) → completed(3)
+                  ↘           ↘
+                            cancelled(-1)
 ```
 
 | Stage | Value | Trigger | Description |
 | ----- | ----- | ------- | ----------- |
-| `pending` | 0 | Pickup created by parent | Created; parent has not approached school yet |
-| `queued` | 1 | GPS within **5 km** of school | Entered school queue (ZADD to Redis sorted set) |
-| `geofence` | 2 | GPS within **500 m** of school | Parent is very close; school display and staff are alerted |
-| `beacon` | 3 | `device_id` received matching a registered gate unit | Parent physically at the gate; student is being released |
-| `completed` | 4 | Explicit completion call / school-side confirmation | Student successfully handed over |
+| `active` | 0 | Pickup created by parent | Created; parent has not approached school yet |
+| `prepare` | 1 | GPS within **500 m** of school | Parent is very close; school/staff are alerted |
+| `queued` | 2 | `device_id` received matching a registered gate unit | Parent at the gate; student being released |
+| `completed` | 3 | Explicit completion call / school-side confirmation | Student successfully handed over |
 | `cancelled` | -1 | Parent cancels; stage must not be `completed` | Soft-deleted; removed from Redis queue |
 
 > **Geofence radius:** hardcoded at `500 m`. Future: configurable per school via admin platform (`school_settings.geofence_radius_m`).
+
+## Vehicle Types
+
+Pickup supports three modes of arrival:
+
+| Type | `vehicle_type` value | Vehicle Required | Notes |
+| ---- | --------------------- | ---------------- | ----- |
+| Private vehicle | `"private"` | Yes — must be an approved family vehicle | Standard parent pickup |
+| Taxi / Shared vehicle | `"taxi"` | Yes — must be an approved shared vehicle (`owner_id IS NULL`) | Third-party pickup |
+| Walking | `"walking"` | No | Parent arrives on foot |
 
 ## Sequence Diagrams
 
@@ -67,17 +74,26 @@ sequenceDiagram
     participant db as PostgreSQL (Ent)
     participant r as Redis
 
-    p->>h: POST /api/v1/me/pickup<br/>{vehicle_id, student_ids}
+    p->>h: POST /api/v1/me/pickup<br/>{vehicle_type, vehicle_id?, student_ids, notes?}
     h->>h: parse JWT → user_id, family_id, school_id
     h->>s: CreatePickup(ctx, userID, req)
-    s->>db: verify vehicle belongs to family & is approved
+    alt vehicle_type == "private"
+        s->>db: verify vehicle belongs to family & is approved & type=private
+    else vehicle_type == "taxi"
+        s->>db: verify vehicle is approved shared vehicle & type=taxi
+    else vehicle_type == "walking"
+        s->>db: vehicle_id = uuid.Nil (no validation)
+    else
+        s-->>h: ErrInvalidVehicleType
+        h-->>p: 400
+    end
     s->>db: verify each student belongs to family & is enrolled
     s->>db: check no active pickup already exists for same students
     alt validation fails
         s-->>h: ErrInvalidData / ErrAlreadyExists
         h-->>p: 400 / 409
     end
-    s->>db: INSERT pickup (stage=0/pending)
+    s->>db: INSERT pickup (stage=0/active)
     s->>r: ZADD pickup:queue:{school_id} {now_ms} {pickup_id} (best-effort)
     s->>db: INSERT pickup_students rows
     s-->>h: *domain.Pickup
@@ -97,12 +113,11 @@ sequenceDiagram
     p->>h: PUT /api/v1/me/pickup/{id}<br/>{current_lat, current_lng, device_id?}
     h->>s: UpdatePickup(ctx, userID, pickupID, req)
     s->>db: GetByID → verify family_id matches
-    s->>s: calculate distance to school
-    alt distance ≤ 500m AND stage == queued
-        s->>db: UPDATE stage=geofence, current_lat, current_lng
-    else device_id provided AND stage == geofence
-        s->>db: verify device_id is valid school gate
-        s->>db: UPDATE stage=beacon, current_lat, current_lng
+    s->>s: calculate Haversine distance to school (hardcoded coords)
+    alt stage == active AND distance ≤ 500m
+        s->>db: UPDATE stage=prepare, current_lat, current_lng
+    else stage == prepare AND device_id provided
+        s->>db: UPDATE stage=queued, current_lat, current_lng
     else
         s->>db: UPDATE current_lat, current_lng only
     end
@@ -162,25 +177,26 @@ Base: `/api/v1/me/pickup`
 
 | Method | Path | Roles | Description |
 | ------ | ---- | ----- | ----------- |
-| `GET` | `/available-children` | `primary_parent`, `additional_parent` | List enrolled children in family |
-| `GET` | `/available-vehicles` | `primary_parent`, `additional_parent` | List approved vehicles in family |
-| `GET` | `/` | all access-control roles | List my active pickups |
-| `GET` | `/{id}` | all access-control roles (same family) | Get pickup detail |
-| `GET` | `/{id}/queue` | all access-control roles (same family) | Get queue position and ETA |
+| `GET` | `/available-children` | `primary_parent`, `additional_parent` | List enrolled children in family not in active pickups |
+| `GET` | `/available-vehicles` | `primary_parent`, `additional_parent` | List approved private vehicles in family |
+| `GET` | `/shared-vehicles` | `primary_parent`, `additional_parent` | List approved shared vehicles (taxi type) |
+| `GET` | `/` | `primary_parent`, `additional_parent` | List my active pickups (stages 0, 1, 2) |
+| `GET` | `/{id}` | `primary_parent`, `additional_parent` | Get pickup detail |
+| `GET` | `/{id}/queue` | `primary_parent`, `additional_parent` | Get queue position and ETA |
 | `POST` | `/` | `primary_parent`, `additional_parent` | Create new pickup |
-| `PUT` | `/{id}` | all access-control roles (same family) | Update pickup position / stage |
+| `PUT` | `/{id}` | `primary_parent`, `additional_parent` | Update pickup position / stage |
 | `DELETE` | `/{id}` | `primary_parent`, `additional_parent` | Cancel pickup |
 
 ## Domain Models
 
 ```go
-// Pickup — stage values: -1=cancelled 0=pending 1=queued 2=geofence 3=beacon 4=completed
+// Pickup — stage values: -1=cancelled 0=active 1=prepare 2=queued 3=completed
 type Pickup struct {
     ID          uuid.UUID  `json:"id"`
     SchoolID    uuid.UUID  `json:"school_id"`
     FamilyID    uuid.UUID  `json:"family_id"`
     CreatedBy   uuid.UUID  `json:"created_by"`
-    VehicleID   uuid.UUID  `json:"vehicle_id"`
+    VehicleID   uuid.UUID  `json:"vehicle_id"` // uuid.Nil for walking mode
     Stage       int        `json:"stage"`
     CurrentLat  *float64   `json:"current_lat,omitempty"`
     CurrentLng  *float64   `json:"current_lng,omitempty"`
@@ -207,9 +223,10 @@ type PickupQueueInfo struct {
 
 // CreatePickupRequest is the validated service input for POST /
 type CreatePickupRequest struct {
-    VehicleID  uuid.UUID   `json:"vehicle_id"`
-    StudentIDs []uuid.UUID `json:"student_ids"`
-    Notes      *string     `json:"notes"`
+    VehicleType string      `json:"vehicle_type"` // "private", "taxi", "walking"
+    VehicleID   uuid.UUID   `json:"vehicle_id"`   // uuid.Nil for walking mode
+    StudentIDs  []uuid.UUID `json:"student_ids"`
+    Notes       *string     `json:"notes"`
 }
 
 // UpdatePickupRequest is the validated service input for PUT /{id}
@@ -230,7 +247,7 @@ type UpdatePickupRequest struct {
 | `school_id` | `uuid` | NOT NULL, index | School this pickup belongs to |
 | `family_id` | `uuid` | NOT NULL, index | Family that created this pickup |
 | `created_by` | `uuid` | NOT NULL | User ID who initiated the pickup |
-| `vehicle_id` | `uuid` | NOT NULL | Vehicle used for this pickup |
+| `vehicle_id` | `uuid` | NOT NULL | Vehicle used for this pickup (uuid.Nil for walking) |
 | `stage` | `int` | NOT NULL, default 0 | Pickup stage (see lifecycle above) |
 | `current_lat` | `float64` | nullable | Parent's last reported latitude |
 | `current_lng` | `float64` | nullable | Parent's last reported longitude |
@@ -296,10 +313,29 @@ EXPIRE pickup:detail:{pickup_id} 21600
 | `ErrActivePickupExists` | 409 | `40903` | student already has an active pickup |
 | `ErrVehicleNotApproved` | 400 | `40006` | vehicle is not approved for pickup |
 | `ErrPickupAlreadyDone` | 400 | `40007` | pickup is already completed or cancelled |
+| `ErrInvalidVehicleType` | 400 | `40008` | invalid vehicle type (must be private, taxi, or walking) |
 | `ErrNotFound` | 404 | `40401` | resource not found |
 | `ErrUnauthorized` | 401 | `40101` | unauthorized access |
 
 ## Port Interfaces
+
+### `ports/services/pickup/service.go`
+
+```go
+type ParentAppService interface {
+    GetAvailableChildren(ctx context.Context, userID string) ([]domain.Student, error)
+    GetAvailableVehicles(ctx context.Context, familyID string) ([]domain.Vehicle, error)
+    GetSharedVehicles(ctx context.Context) ([]domain.Vehicle, error)
+
+    ListMyPickups(ctx context.Context, userID string) ([]*domain.Pickup, error)
+    GetPickup(ctx context.Context, userID, pickupID string) (*domain.Pickup, error)
+    GetPickupQueue(ctx context.Context, userID, pickupID string) (*domain.PickupQueueInfo, error)
+
+    CreatePickup(ctx context.Context, userID string, req *domain.CreatePickupRequest) (*domain.Pickup, error)
+    UpdatePickup(ctx context.Context, userID, pickupID string, req *domain.UpdatePickupRequest) (*domain.Pickup, error)
+    CancelPickup(ctx context.Context, userID, pickupID string) error
+}
+```
 
 ### `ports/repositories/pickup/repository.go`
 
@@ -333,21 +369,4 @@ func WithSchoolID(schoolID string) QueryOption
 func WithStage(stage int) QueryOption
 func WithLimit(limit int) QueryOption
 func WithOffset(offset int) QueryOption
-```
-
-### `ports/services/pickup/service.go`
-
-```go
-type ParentAppService interface {
-    GetAvailableChildren(ctx context.Context, userID string) ([]domain.Student, error)
-    GetAvailableVehicles(ctx context.Context, userID string) ([]domain.Vehicle, error)
-
-    ListMyPickups(ctx context.Context, userID string) ([]*domain.Pickup, error)
-    GetPickup(ctx context.Context, userID, pickupID string) (*domain.Pickup, error)
-    GetPickupQueue(ctx context.Context, userID, pickupID string) (*domain.PickupQueueInfo, error)
-
-    CreatePickup(ctx context.Context, userID string, req *domain.CreatePickupRequest) (*domain.Pickup, error)
-    UpdatePickup(ctx context.Context, userID, pickupID string, req *domain.UpdatePickupRequest) (*domain.Pickup, error)
-    CancelPickup(ctx context.Context, userID, pickupID string) error
-}
 ```
