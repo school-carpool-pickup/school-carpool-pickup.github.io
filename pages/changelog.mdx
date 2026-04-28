@@ -1,0 +1,66 @@
+# Changelog - Frontend Integration Notes
+
+## v0.3.0 (dev branch)
+
+### 1. Student Role และ Invitation Flow
+- **เพิ่ม** `RoleStudent` constant สำหรับระบุ role นักเรียน
+- **เพิ่ม** `studentInviteSvc` ใน parentAppService สำหรับจัดการลงทะเบียนนักเรียน
+- **เพิ่ม** `InviteFamilyMember` รองรับ student role ด้วย `slices.Contains` validation
+- **เพิ่ม** warn log level ใน logger config
+
+**Integration:** เมื่อ invite นักเรียน ให้ส่ง `role: "student"` ใน request
+
+---
+
+### 2. Pickup Stage Lifecycle ใหม่
+**เปลี่ยนจาก:** `pending → queued → geofence → beacon → completed`
+**เป็น:** `active(0) → prepare(1) → queued(2) → completed(3)`
+
+- ลบ stage `pending` และ `beacon`
+- GPS 500m จะ trigger `prepare` (เดิมใช้ geofence 500m)
+- Beacon sign detected จะ trigger `queued`
+
+**Integration:** Frontend ต้องปรับ logic แสดงสถานะ pickup ให้ตรงกับ stage ใหม่
+
+---
+
+### 3. Vehicle Type Management
+- **เพิ่ม** `VehicleType` field ใน `Vehicle` struct และ `Pickup`
+- **เพิ่ม** `SetVehicleType`, `SetNillableVehicleType` methods
+- **เพิ่ม** `WithVehicleType` option สำหรับ query
+- **เพิ่ม** `ErrInvalidVehicleType` error
+- **เพิ่ม** seed script สำหรับ public/shared vehicles (taxi, walking)
+
+**Integration:** ถ้าต้องการ filter pickup ตาม vehicle type สามารถส่ง query param `vehicle_type` ได้เลย
+
+---
+
+### 4. ลบ Student Self-Registration
+- **ลบ** `service_register.go` และ `handler_parent.go` (unused endpoints)
+- **ลบ** `add-student-members` skill
+- Student จะต้องได้รับ invitation จาก parent เท่านั้น
+
+**Integration:** Frontend ต้องเอา flow ลงทะเบียนตัวเองของ student ออก ใช้ invitation flow แทน
+
+---
+
+### 5. DTOs with Descriptions & Examples
+เพิ่ม field descriptions และ examples ใน DTOs ต่างๆ:
+- `RequestRegister`, `RequestLogin`, `ResponseRegister`, `RequestValidate`
+- OTP-related DTOs
+- Pickup-related DTOs
+- Student DTOs (invite, confirmation, admin)
+- Vehicle DTOs
+- Family และ Student admin DTOs
+
+**Integration:** Swagger/OpenAPI docs จะแสดง descriptions ชัดเจนขึ้น
+
+---
+
+### 6. API Documentation Comments
+Refactor comments ใน handler files ให้ consistent ทั้ง user, vehicle, family modules
+
+---
+
+### 7. Redis Queue Error Logging
+ปรับ log ใน Redis queue ให้เป็น structured warning log ชัดเจนขึ้น

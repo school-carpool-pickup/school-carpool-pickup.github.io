@@ -25,6 +25,7 @@ const config: ZudokuConfig = {
           icon: "sparkles",
           items: [
             "/introduction",
+            "/changelog",
           ],
         },
         {
