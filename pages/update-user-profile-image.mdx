@@ -15,6 +15,33 @@ bs ->> pma: reply signed URL to upload with object path
 pma ->> pma: compress image
 pma ->> gcs: call HTTP request: PUT {signed URL} to upload image
 gcs ->> pma: reply success
-pma ->> bs: call HTTP request to update user profile
+pma ->> bs: call HTTP request to update user profile image with {object path}
 bs ->> pma: reply success
 ```
+
+## Example cURL to update image profile
+
+```bash
+curl --request PUT \
+  --url 'https://storage.googleapis.com/xxx/profile-images/xxx.png?X-Goog-Algorithm=XXX&X-Goog-Credential=XXX&X-Goog-Date=20260524T062845Z&X-Goog-Expires=899&X-Goog-Signature=XXX&X-Goog-SignedHeaders=XXX' \
+  --header 'content-type: image/png' \
+  --data-binary '@/Users/mac/downloads/profile.png'
+```
+
+## Example response of signed url
+
+```base
+{
+  "data": {
+    "upload_url": "https://storage.googleapis.com/xxx/profile-images/xxx.png?X-Goog-Algorithm=XXX&X-Goog-Credential=XXX&X-Goog-Date=20260524T062845Z&X-Goog-Expires=899&X-Goog-Signature=XXX&X-Goog-SignedHeaders=XXX",
+    "object_path": "profile-images/xxx.png",
+    "expires_at": "2026-05-24T09:00:09.769792589Z"
+  }
+}
+```
+
+| key         | description                   | example                                 |
+| ----------- | ----------------------------- | --------------------------------------- |
+| upload_url  | for upload image              | https://storage.googleapis.com/xxx/.... |
+| object_path | for update user profile image | profile-images/xxx.png                  |
+| expires_at  | upload_url TTL (15 minutes)   | 2026-05-24T09:00:09.769792589Z          |
