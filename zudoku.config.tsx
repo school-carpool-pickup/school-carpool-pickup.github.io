@@ -23,10 +23,7 @@ const config: ZudokuConfig = {
           type: "category",
           label: "Getting Started",
           icon: "sparkles",
-          items: [
-            "/introduction",
-            "/changelog",
-          ],
+          items: ["/introduction", "/changelog"],
         },
         {
           type: "category",
@@ -37,6 +34,7 @@ const config: ZudokuConfig = {
             "/parent-mobile-login",
             "/add-family-members",
             "/pickup-student",
+            "/update-user-profile-image",
           ],
         },
       ],
@@ -51,7 +49,7 @@ const config: ZudokuConfig = {
       to: "https://dbdocs.io/mossnana/school-pickup",
       label: "Database Schema",
       icon: "database",
-    }
+    },
   ],
   redirects: [{ from: "/", to: "/introduction" }],
   apis: [
@@ -59,7 +57,7 @@ const config: ZudokuConfig = {
       type: "file",
       input: "./apis/openapi_design.yaml",
       path: "/api-design",
-    }
+    },
   ],
 };
 
