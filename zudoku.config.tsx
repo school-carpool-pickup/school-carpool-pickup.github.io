@@ -35,6 +35,7 @@ const config: ZudokuConfig = {
             "/add-family-members",
             "/pickup-student",
             "/update-user-profile-image",
+            "/notification",
           ],
         },
       ],
