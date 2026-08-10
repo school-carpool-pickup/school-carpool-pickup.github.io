@@ -2,17 +2,133 @@
 title: Parent mobile login
 ---
 
-## Sequence diagram
+# Parent mobile login
+
+## Overview
+
+`POST /api/v1/auth/login` is a single endpoint with three grant types. Every
+grant resolves a user, then passes through the **same** issuing path:
+
+1. `ensureActive` — the user **and** their family must be `active`
+2. `client_id` ↔ role authorization — the resolved role must be allowed for the
+   calling client
+3. update `last_login`, then sign the access and refresh tokens
+
+| Grant type | Used for | Required fields |
+| --- | --- | --- |
+| `urn:ietf:params:oauth:grant-type:jwt-bearer` | OTP login (phone) | `assertion` |
+| `password` | email/phone + password login (e.g. an invited student) | `username`, `password` |
+| `refresh_token` | silent renewal | `refresh_token` |
+
+`client_id` is required for all three. The parent mobile app sends
+`client_id = parent_mobile_app`, which authorizes the roles
+`primary_parent`, `additional_parent`, `supplementary`, and `student`.
+
+## Sequence diagram — OTP login (jwt-bearer)
 
 ```mermaid
 sequenceDiagram
-    participant c as client
+    actor c as client (app)
     participant bs as backend-service
+    participant db as PostgreSQL
+    participant msg as SMS + email
 
-    c ->> bs: Input phone to send otp<br/>/api/v1/otp/login
-    bs ->> c: ref data
-    c ->> bs: Input valid OTP<br/>/api/v1/otp/login/verify
-    bs ->> c: short life time assertion (1 minutes)
-    c ->> bs: Grant auth with grant_type urn:ietf:params:oauth:grant-type:jwt-bearer<br/>/api/v1/auth/login
-    bs ->> c: Get access token and refresh token
+    c ->> bs: POST /api/v1/otp/login<br/>{phone}
+    bs ->> db: SELECT user BY phone
+    alt no user with that phone
+        bs -->> c: 404 ErrNotFound
+    end
+    bs ->> db: INSERT otps {phone, code(6 digits), reference(4 chars), expires_at}
+    bs -->> c: {reference, expires_at}
+    bs -) msg: "OTP: {code} (ref: {reference})"<br/>sent to the user's phone and email
+
+    c ->> bs: POST /api/v1/otp/login/verify<br/>{reference, code}
+    alt used / wrong code / expired
+        bs -->> c: 400 ErrInvalidData
+    end
+    bs ->> db: UPDATE otps SET used_at = now()
+    bs ->> bs: sign assertion<br/>{purpose:"login", sub: phone, exp: now + 1m}
+    bs -->> c: assertion (1 minute lifetime)
+
+    c ->> bs: POST /api/v1/auth/login<br/>grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer<br/>client_id=parent_mobile_app<br/>assertion={assertion}
+    bs ->> bs: verify assertion signature and purpose == "login"
+    bs ->> db: SELECT user BY sub (phone)
+    bs ->> bs: ensureActive(user)
+    bs ->> db: SELECT family BY user.family_id
+    alt user.status != "active"<br/>or family.status != "active"
+        bs -->> c: 401 ErrUnauthorized
+    end
+    bs ->> bs: role allowed for client_id?
+    alt role not authorized for this client
+        bs -->> c: 401 ErrUnauthorized
+    end
+    bs ->> db: UPDATE user SET last_login = now()
+    bs -->> c: {access_token, refresh_token,<br/>token_type:"Bearer", expires_in:3600,<br/>user_id, roles}
 ```
+
+## Sequence diagram — password grant
+
+Used by accounts that were given a password directly — most notably a student
+invited by their parent, who receives a generated password by email (see
+[Invite student](/invite-student)).
+
+```mermaid
+sequenceDiagram
+    actor c as client (app)
+    participant bs as backend-service
+    participant db as PostgreSQL
+
+    c ->> bs: POST /api/v1/auth/login<br/>grant_type=password<br/>client_id=parent_mobile_app<br/>username, password
+    bs ->> bs: username contains "@" ? lookup by email : lookup by normalized phone
+    bs ->> db: SELECT user
+    bs ->> bs: bcrypt compare
+    alt password mismatch
+        bs -->> c: 401 ErrInvalidCredentials
+    end
+    bs ->> bs: ensureActive + client/role check
+    bs -->> c: {access_token, refresh_token, ...}
+```
+
+`refresh_token` grant works the same way, resolving the user from the `sub`
+claim of the refresh token before running the identical checks.
+
+## Activation gate (`ensureActive`)
+
+Every grant runs this before a token is issued:
+
+| Check | Failure |
+| --- | --- |
+| `user.status == "active"` | `401 ErrUnauthorized` |
+| `user.family_id` is null | ✅ allowed — the gate stops here (staff/admin have no family) |
+| family loaded and `family.status == "active"` | `401 ErrUnauthorized` |
+
+A user in `pending` status, or one whose family has been suspended, cannot log
+in with **any** grant type.
+
+## Client ↔ role authorization
+
+| `client_id` | Authorized roles |
+| --- | --- |
+| `parent_mobile_app` | `primary_parent`, `additional_parent`, `supplementary`, `student` |
+| `admin_crm` | `admin` |
+| `stuff_crm` | `staff` |
+| `business_crm` | `owner` |
+| `dashboard_crm` | `screen_display` |
+
+An unknown `client_id`, or a role not in that client's list, fails with
+`401 ErrUnauthorized` — even when the password or assertion was correct.
+
+## Token response
+
+| Field | Value |
+| --- | --- |
+| `access_token` | HS256 JWT, **1 hour** |
+| `refresh_token` | HS256 JWT, **7 days** |
+| `token_type` | `Bearer` |
+| `expires_in` | `3600` |
+| `user_id` | resolved user ID |
+| `roles` | single-element array with the user's role |
+
+Access token claims: `sub`, `user_id`, `aud`/`client_id`, `roles`, `exp`, `iat`,
+plus `school_id` (omitted for `owner`) and `family_id` (omitted when the user has
+no family).

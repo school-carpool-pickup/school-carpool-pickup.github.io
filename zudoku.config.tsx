@@ -33,6 +33,7 @@ const config: ZudokuConfig = {
             "/primary-parent-registration",
             "/parent-mobile-login",
             "/add-family-members",
+            "/invite-student",
             "/pickup-student",
             "/update-user-profile-image",
             "/notification",

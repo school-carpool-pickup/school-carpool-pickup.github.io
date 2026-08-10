@@ -2,31 +2,120 @@
 title: Add family members
 ---
 
+# Add family members
+
+## Overview
+
+A **primary parent** invites another adult into their family — either an
+`additional_parent` or a `supplementary` member (driver, grandparent, …).
+
+The invitation is identified by the invitee's **phone number**. The backend
+generates a short **invite code**, stores it as an OTP record with
+`purpose = "invite"`, and delivers it by **SMS**. The invitee then registers
+through the normal `/api/v1/auth/register` endpoint using that code together
+with the phone number it was sent to.
+
+> Inviting a **student** works differently — the student is matched against the
+> school's records by school email and the account is created immediately.
+> See [Invite student](/invite-student).
+
+| | |
+| --- | --- |
+| Endpoint | `POST /api/v1/families/me/invitations` |
+| Allowed role | `primary_parent` only |
+| Request body | `{ "phone": "0812345678", "role": "additional_parent" }` — or `"role": "supplementary"` |
+| Delivery channel | SMS to `phone` |
+| Invite code TTL | **7 days** |
+
 ## Sequence diagram
 
 ```mermaid
 sequenceDiagram
-    actor pp as primary-parent
+    actor pp as primary-parent (app)
     participant bs as backend-service
-    participant db as DB
-    participant m as mobile-app
+    participant db as PostgreSQL
+    participant sms as SMS gateway
+    actor iv as invitee (app)
 
-    pp ->> bs: invite other member<br/>POST /api/v1/families/me/invitations<br/>{email: "...", role: "additional_parent|supplementary"}
-    bs ->> bs: check JWT & role=primary_parent
-    bs ->> db: check user with email not exist
-    alt user already exists
-        bs -->> pp: 409 Conflict<br/>user already exist
-        note over pp, bs: end process
+    pp ->> bs: POST /api/v1/families/me/invitations<br/>{phone, role}
+    bs ->> bs: validate JWT, role must be primary_parent
+    bs ->> bs: NormalizePhone(phone)
+    alt phone is empty after normalization
+        bs -->> pp: 400 ErrInvalidData
     end
-    bs ->> db: verify email domain matches a school
-    bs ->> db: create invitation record
-    bs -->> pp: 201 {id, family_id, invitee_email, register_token}
-    note over bs: run routine background job (async)
-    bs ->> m: send email with deep link<br/>to: invitee email<br/>subject: Invitation from {primary_parent_name}<br/>Link: {host}/api/v1/families/invitations/{register_token}
-    m ->> bs: open deep link with {register_token}
-    bs ->> bs: validate register_token (family_id, school_id, role, expiry)
-    m ->> bs: complete registration<br/>/api/v1/auth/register with {register_token}<br/>+ user info (password, first_name, last_name, phone)
-    bs ->> db: create user with family_id, school_id, role
-    bs -->> m: return auth token
-    note over bs, m: end process
+    bs ->> db: user with this phone already exists?
+    alt user already exists
+        bs -->> pp: 409 ErrAlreadyExists
+    end
+    bs ->> db: load inviter -> family (family_id, school_id)
+    alt inviter has no family
+        bs -->> pp: 404 ErrNotFound
+    end
+    bs ->> bs: GenerateInviteCode(8)
+    bs ->> db: INSERT otps<br/>{phone, code, purpose:"invite",<br/>family_id, school_id, role,<br/>expires_at: now + 7d}
+    bs -->> pp: 201 {family_id, school_id, invitee_phone,<br/>invitee_role, status:"sent", expires_at}
+    note over bs, sms: fire-and-forget goroutine
+    bs -) sms: "School Carpool: your family invite code is {code}..."
+    sms -) iv: SMS with invite code
+
+    iv ->> bs: POST /api/v1/auth/register<br/>{invitation_code, phone, password,<br/>first_name, last_name, email?}
+    bs ->> db: SELECT otp WHERE phone = ? AND code = ?<br/>AND used_at IS NULL
+    alt code not found / phone mismatch / expired
+        bs -->> iv: 401 ErrInvalidCredentials
+    end
+    bs ->> bs: build RegisterGrant<br/>{school_id, family_id, role} from the invite
+    bs ->> db: INSERT user (status active, role from grant)
+    bs ->> db: UPDATE user SET family_id = grant.family_id
+    bs ->> db: UPDATE otps SET used_at = now()
+    bs -->> iv: 201 user profile
+    note over iv, bs: the invitee can now log in<br/>see Parent mobile login
 ```
+
+## Invite code
+
+| Property | Value |
+| --- | --- |
+| Length | 8 characters |
+| Charset | `ABCDEFGHJKLMNPQRSTUVWXYZ23456789` — `I`, `O`, `0`, `1` are excluded to avoid misreads |
+| Storage | `otps` table, `purpose = "invite"`, indexed on `(phone, code)` |
+| Carries | `family_id`, `school_id`, `role` — the invitee never sends these |
+| TTL | 7 days (`expires_at`) |
+| Single use | consumed by setting `used_at` on successful registration |
+
+**The code alone is not a lookup key.** Lookup is always `phone + code`, so a
+code only unlocks the invitation of the exact phone number it was sent to.
+Client input is normalized before lookup:
+
+- `NormalizePhone` — strips spaces, `-`, `(`, `)`, leading `+`/`0066`, and
+  converts a `66…` (11 digit) number to the local `0…` form.
+- `NormalizeInviteCode` — trims, uppercases, and strips spaces and dashes, so
+  `k7rm-px24` and `K7RMPX24` are the same code.
+
+## Registration request
+
+`register_token` and `invitation_code` are mutually exclusive — exactly one must
+be present.
+
+| Field | Required | Notes |
+| --- | --- | --- |
+| `invitation_code` | required unless `register_token` is given | the 8-character code from SMS |
+| `phone` | **required for this flow** | must be the number the code was sent to |
+| `password` | ✅ | |
+| `first_name` / `last_name` | ✅ | |
+| `email` | optional | at least one of `phone` / `email` must be present overall |
+| `register_token` | must be omitted here | used by the primary parent onboarding flow instead |
+
+## Error cases
+
+| Situation | Result |
+| --- | --- |
+| Caller is not `primary_parent` | `401 Unauthorized` (role validator) |
+| `phone` empty after normalization | `400 ErrInvalidData` |
+| A user already registered with that phone | `409 ErrAlreadyExists` |
+| Inviter has no family | `404 ErrNotFound` |
+| Code unknown, already used, or sent to a different phone | `401 ErrInvalidCredentials` |
+| Code past `expires_at` | `401 ErrInvalidCredentials` |
+| Invite record missing `family_id` / `school_id` / `role` | `401 ErrInvalidCredentials` |
+
+> SMS delivery runs in a background goroutine. A `201` means the invitation was
+> stored, not that the SMS was already delivered.
